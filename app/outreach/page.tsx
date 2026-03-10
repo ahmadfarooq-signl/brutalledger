@@ -15,7 +15,7 @@ const STATUS_LABELS: Record<Status, string> = {
 }
 
 const STATUS_COLORS: Record<Status, string> = {
-  warming: '#8a7340', dm_sent: '#7a8fbc', replied: '#c9a96e',
+  warming: '#8a7340', dm_sent: '#7a8fbc', replied: '#f26419',
   call_booked: '#9b7fd4', proposal_sent: '#c4a842',
   closed_won: '#5d9c70', closed_lost: '#c0504d',
 }
@@ -96,7 +96,7 @@ export default function Outreach() {
                   <button onClick={() => i === 0 ? setDms(d => Math.max(0, d - 1)) : setComments(d => Math.max(0, d - 1))}
                     style={{ flex: 1, padding: '0.375rem', border: '1px solid var(--color-border-subtle)', background: 'transparent', color: 'var(--color-text-dim)', borderRadius: '5px', cursor: 'pointer', fontSize: '1rem' }}>−</button>
                   <button onClick={() => i === 0 ? setDms(d => d + 1) : setComments(d => d + 1)}
-                    style={{ flex: 1, padding: '0.375rem', border: '1px solid #c9a96e44', background: '#c9a96e11', color: '#c9a96e', borderRadius: '5px', cursor: 'pointer', fontSize: '1rem' }}>+</button>
+                    style={{ flex: 1, padding: '0.375rem', border: '1px solid #f2641944', background: '#f2641911', color: '#f26419', borderRadius: '5px', cursor: 'pointer', fontSize: '1rem' }}>+</button>
                 </div>
               </div>
             ))}
@@ -118,9 +118,9 @@ export default function Outreach() {
               return (
                 <button key={s} onClick={() => setFilter(s)} style={{
                   padding: '0.3rem 0.75rem', borderRadius: '5px', border: '1px solid',
-                  borderColor: filter === s ? '#c9a96e55' : 'var(--color-border-subtle)',
-                  background: filter === s ? '#c9a96e11' : 'transparent',
-                  color: filter === s ? '#c9a96e' : 'var(--color-text-placeholder)',
+                  borderColor: filter === s ? '#f2641955' : 'var(--color-border-subtle)',
+                  background: filter === s ? '#f2641911' : 'transparent',
+                  color: filter === s ? '#f26419' : 'var(--color-text-placeholder)',
                   fontSize: '0.65rem', cursor: 'pointer', letterSpacing: '0.08em',
                 }}>
                   {s === 'all' ? 'All' : STATUS_LABELS[s]} {count > 0 && <span style={{ opacity: 0.6 }}>({count})</span>}
@@ -164,7 +164,7 @@ export default function Outreach() {
                         {p.followers && <span style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)' }}>{p.followers} followers</span>}
                         {p.niche && <span style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)' }}>· {p.niche}</span>}
                         {p.url && (
-                          <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.65rem', color: '#c9a96e', textDecoration: 'none' }}>LinkedIn ↗</a>
+                          <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.65rem', color: '#f26419', textDecoration: 'none' }}>LinkedIn ↗</a>
                         )}
                       </div>
                       {p.notes && <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', lineHeight: 1.4, marginBottom: '0.375rem' }}>{p.notes}</div>}
@@ -192,15 +192,15 @@ export default function Outreach() {
                       {p.status === 'warming' && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <div style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)' }}>
-                            <span style={{ color: p.commentCount > 0 ? '#c9a96e' : 'var(--color-text-placeholder)', fontFamily: 'var(--font-playfair)', fontSize: '0.8rem', fontWeight: '600' }}>{p.commentCount}</span>
+                            <span style={{ color: p.commentCount > 0 ? '#f26419' : 'var(--color-text-placeholder)', fontFamily: 'var(--font-playfair)', fontSize: '0.8rem', fontWeight: '600' }}>{p.commentCount}</span>
                             {' '}comment{p.commentCount !== 1 ? 's' : ''}
                           </div>
                           <button
                             onClick={() => logComment(p.id)}
                             style={{
                               padding: '0.2rem 0.5rem', borderRadius: '4px',
-                              border: '1px solid #c9a96e44', background: '#c9a96e11',
-                              color: '#c9a96e', cursor: 'pointer',
+                              border: '1px solid #f2641944', background: '#f2641911',
+                              color: '#f26419', cursor: 'pointer',
                               fontSize: '0.6rem', letterSpacing: '0.06em',
                               fontFamily: 'var(--font-dm-sans)',
                             }}

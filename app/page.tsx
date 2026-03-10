@@ -57,7 +57,7 @@ export default function Dashboard() {
           </div>
 
           {/* Brief */}
-          <div className="card" style={{ padding: '1.25rem 1.5rem', marginBottom: '2rem', borderColor: '#c9a96e22', background: 'var(--color-card)' }}>
+          <div className="card" style={{ padding: '1.25rem 1.5rem', marginBottom: '2rem', borderColor: '#f2641922', background: 'var(--color-card)' }}>
             <div style={{ fontSize: '0.6rem', color: 'var(--color-accent)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Morning Brief</div>
             <p style={{ fontFamily: 'var(--font-playfair)', fontStyle: 'italic', fontSize: '0.95rem', color: 'var(--color-text-muted)', lineHeight: 1.6 }}>"{brief}"</p>
           </div>
@@ -194,9 +194,9 @@ function PomodoroWidget() {
         {MODES.map((m, i) => (
           <button key={i} onClick={() => switchMode(i)} style={{
             flex: 1, padding: '0.3rem', borderRadius: '4px', border: '1px solid',
-            borderColor: mode === i ? '#c9a96e55' : 'var(--color-border-subtle)',
-            background: mode === i ? '#c9a96e11' : 'transparent',
-            color: mode === i ? '#c9a96e' : 'var(--color-text-placeholder)',
+            borderColor: mode === i ? '#f2641955' : 'var(--color-border-subtle)',
+            background: mode === i ? '#f2641911' : 'transparent',
+            color: mode === i ? '#f26419' : 'var(--color-text-placeholder)',
             fontSize: '0.65rem', cursor: 'pointer', fontFamily: 'var(--font-dm-sans)',
             letterSpacing: '0.04em', transition: 'all 0.15s ease',
           }}>{m.label}</button>
@@ -211,7 +211,7 @@ function PomodoroWidget() {
           {isBreak ? 'Break time' : `Session ${session}`}
         </div>
         <div style={{ height: '2px', background: 'var(--color-border-subtle)', borderRadius: '1px', marginTop: '0.625rem' }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: isBreak ? '#4a7c59' : '#c9a96e', borderRadius: '1px', transition: 'width 1s linear' }} />
+          <div style={{ height: '100%', width: `${pct}%`, background: isBreak ? '#4a7c59' : '#f26419', borderRadius: '1px', transition: 'width 1s linear' }} />
         </div>
       </div>
 

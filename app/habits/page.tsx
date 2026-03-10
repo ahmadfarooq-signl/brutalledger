@@ -140,9 +140,9 @@ export default function Habits() {
             {(['today', 'week', 'month'] as const).map(v => (
               <button key={v} onClick={() => setView(v)} style={{
                 padding: '0.375rem 0.875rem', borderRadius: '5px', border: '1px solid',
-                borderColor: view === v ? '#c9a96e55' : 'var(--color-border-subtle)',
-                background: view === v ? '#c9a96e11' : 'transparent',
-                color: view === v ? '#c9a96e' : 'var(--color-text-placeholder)',
+                borderColor: view === v ? '#f2641955' : 'var(--color-border-subtle)',
+                background: view === v ? '#f2641911' : 'transparent',
+                color: view === v ? '#f26419' : 'var(--color-text-placeholder)',
                 fontSize: '0.7rem', cursor: 'pointer', letterSpacing: '0.08em',
                 textTransform: 'capitalize' as const,
               }}>{v}</button>
@@ -193,8 +193,8 @@ export default function Habits() {
                     const isFuture = d > new Date()
                     return (
                       <div key={i} style={{ textAlign: 'center', padding: '0.375rem 0.25rem' }}>
-                        <div style={{ fontSize: '0.58rem', color: isToday ? '#c9a96e' : 'var(--color-text-placeholder)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{WEEK_DAYS[i]}</div>
-                        <div style={{ fontSize: '0.82rem', fontFamily: 'var(--font-playfair)', color: isToday ? '#c9a96e' : isFuture ? 'var(--color-text-placeholder)' : 'var(--color-text-muted)', fontWeight: isToday ? '700' : '400' }}>{d.getDate()}</div>
+                        <div style={{ fontSize: '0.58rem', color: isToday ? '#f26419' : 'var(--color-text-placeholder)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{WEEK_DAYS[i]}</div>
+                        <div style={{ fontSize: '0.82rem', fontFamily: 'var(--font-playfair)', color: isToday ? '#f26419' : isFuture ? 'var(--color-text-placeholder)' : 'var(--color-text-muted)', fontWeight: isToday ? '700' : '400' }}>{d.getDate()}</div>
                       </div>
                     )
                   })}
@@ -202,7 +202,7 @@ export default function Habits() {
                 {/* Habit rows */}
                 {Object.entries(HABITS).map(([cat, habits]) => (
                   <div key={cat}>
-                    <div style={{ fontSize: '0.55rem', color: '#c9a96e', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '0.5rem 0 0.25rem', borderTop: '1px solid var(--color-border-subtle)' }}>{CAT_LABELS[cat]}</div>
+                    <div style={{ fontSize: '0.55rem', color: '#f26419', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '0.5rem 0 0.25rem', borderTop: '1px solid var(--color-border-subtle)' }}>{CAT_LABELS[cat]}</div>
                     {habits.map(h => (
                       <div key={h.id} style={{ display: 'grid', gridTemplateColumns: '180px repeat(7, 1fr)', gap: '3px', marginBottom: '3px', alignItems: 'center' }}>
                         <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', paddingRight: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.label}</div>
@@ -211,17 +211,17 @@ export default function Habits() {
                           const isFuture = d > new Date() && ds !== today
                           const isDone = !!(records[ds] || {})[h.id]
                           const isPast = d < new Date() || ds === today
-                          let bg = 'var(--color-border-subtle)'
-                          if (!isFuture && isPast) bg = isDone ? '#4a7c5922' : '#8b3a3a22'
-                          const border = !isFuture && isPast ? (isDone ? '#4a7c5944' : '#8b3a3a44') : 'var(--color-border-subtle)'
+                          const bg = !isFuture && isPast
+                            ? (isDone ? 'var(--color-done-bg)' : 'var(--color-missed-bg)')
+                            : 'var(--color-border-subtle)'
                           return (
                             <div key={i} style={{
                               height: '24px', borderRadius: '3px',
-                              background: bg, border: `1px solid ${border}`,
+                              background: bg, border: '1px solid var(--color-border-subtle)',
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>
                               {!isFuture && isPast && (
-                                <span style={{ fontSize: '0.6rem', color: isDone ? '#5d9c70' : '#c0504d' }}>
+                                <span style={{ fontSize: '0.6rem', color: isDone ? 'var(--color-done-text)' : 'var(--color-missed-text)' }}>
                                   {isDone ? '✓' : '×'}
                                 </span>
                               )}
@@ -274,12 +274,12 @@ export default function Habits() {
                       padding: '0.375rem 0.25rem',
                       borderRadius: '4px',
                       background: bg,
-                      border: `1px solid ${isToday ? '#c9a96e55' : 'transparent'}`,
+                      border: `1px solid ${isToday ? '#f2641955' : 'transparent'}`,
                       textAlign: 'center',
                       minHeight: '44px',
                       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.125rem',
                     }}>
-                      <div style={{ fontSize: '0.72rem', color: isToday ? '#c9a96e' : 'var(--color-text-muted)', fontWeight: isToday ? '700' : '400' }}>{d.getDate()}</div>
+                      <div style={{ fontSize: '0.72rem', color: isToday ? '#f26419' : 'var(--color-text-muted)', fontWeight: isToday ? '700' : '400' }}>{d.getDate()}</div>
                       {!isFuture && hasData && (
                         <div style={{ fontSize: '0.6rem', color: textColor }}>{p}%</div>
                       )}

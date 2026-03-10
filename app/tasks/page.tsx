@@ -9,9 +9,9 @@ type Task = {
   estimatedMins: number; loggedSecs: number; isTracking: boolean; trackStart: number | null
 }
 
-const PRIORITY_COLORS: Record<Priority, string> = { high: '#c0504d', normal: '#c9a96e', low: '#55555f' }
+const PRIORITY_COLORS: Record<Priority, string> = { high: '#c0504d', normal: '#f26419', low: '#55555f' }
 const BG = 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?auto=format&fit=crop&w=2560&q=80'
-const COLORS = ['#c9a96e', '#5d9c70', '#c0504d', '#9b7fd4', '#7a8fbc', '#c4a842', '#8a8a94']
+const COLORS = ['#f26419', '#5d9c70', '#c0504d', '#9b7fd4', '#7a8fbc', '#c4a842', '#8a8a94']
 
 function fmtTime(secs: number): string {
   if (secs <= 0) return '0s'
@@ -33,7 +33,7 @@ export default function Tasks() {
     title: '', projectId: '', priority: 'normal' as Priority,
     status: 'today' as Status, estimatedMins: ''
   })
-  const [newProject, setNewProject] = useState({ name: '', color: '#c9a96e' })
+  const [newProject, setNewProject] = useState({ name: '', color: '#f26419' })
 
   useEffect(() => {
     if (!activeTaskId) return
@@ -62,7 +62,7 @@ export default function Tasks() {
     if (!newProject.name) return
     const p: Project = { ...newProject, id: Date.now().toString() }
     setProjects(prev => [...prev, p])
-    setNewProject({ name: '', color: '#c9a96e' })
+    setNewProject({ name: '', color: '#f26419' })
     setShowAddProject(false)
     // Update default projectId for new tasks
     setNewTask(t => ({ ...t, projectId: p.id }))
@@ -134,12 +134,12 @@ export default function Tasks() {
 
           {/* Active timer banner */}
           {activeTask && (
-            <div style={{ position: 'sticky', top: '60px', zIndex: 40, background: '#c9a96e11', border: '1px solid #c9a96e33', borderRadius: '6px', padding: '0.625rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ position: 'sticky', top: '60px', zIndex: 40, background: '#f2641911', border: '1px solid #f2641933', borderRadius: '6px', padding: '0.625rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#c9a96e' }} className="pulse-soft" />
-                <span style={{ fontSize: '0.78rem', color: '#c9a96e' }}>Tracking: {activeTask.title}</span>
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f26419' }} className="pulse-soft" />
+                <span style={{ fontSize: '0.78rem', color: '#f26419' }}>Tracking: {activeTask.title}</span>
               </div>
-              <span style={{ fontFamily: 'var(--font-playfair)', fontSize: '0.9rem', color: '#c9a96e', fontVariantNumeric: 'tabular-nums' }}>
+              <span style={{ fontFamily: 'var(--font-playfair)', fontSize: '0.9rem', color: '#f26419', fontVariantNumeric: 'tabular-nums' }}>
                 {fmtTime(getElapsedSecs(activeTask))}
               </span>
             </div>
@@ -226,9 +226,9 @@ export default function Tasks() {
               {(['today', 'active', 'completed', 'all'] as const).map(s => (
                 <button key={s} onClick={() => setFilter(s)} style={{
                   padding: '0.3rem 0.75rem', borderRadius: '5px', border: '1px solid',
-                  borderColor: filter === s ? '#c9a96e55' : 'var(--color-border-subtle)',
-                  background: filter === s ? '#c9a96e11' : 'transparent',
-                  color: filter === s ? '#c9a96e' : 'var(--color-text-placeholder)',
+                  borderColor: filter === s ? '#f2641955' : 'var(--color-border-subtle)',
+                  background: filter === s ? '#f2641911' : 'transparent',
+                  color: filter === s ? '#f26419' : 'var(--color-text-placeholder)',
                   fontSize: '0.65rem', cursor: 'pointer', letterSpacing: '0.08em', textTransform: 'capitalize' as const,
                 }}>{s}</button>
               ))}
@@ -237,9 +237,9 @@ export default function Tasks() {
               <div style={{ display: 'flex', gap: '0.375rem' }}>
                 <button onClick={() => setProjectFilter('all')} style={{
                   padding: '0.3rem 0.75rem', borderRadius: '5px', border: '1px solid',
-                  borderColor: projectFilter === 'all' ? '#c9a96e55' : 'var(--color-border-subtle)',
-                  background: projectFilter === 'all' ? '#c9a96e11' : 'transparent',
-                  color: projectFilter === 'all' ? '#c9a96e' : 'var(--color-text-placeholder)',
+                  borderColor: projectFilter === 'all' ? '#f2641955' : 'var(--color-border-subtle)',
+                  background: projectFilter === 'all' ? '#f2641911' : 'transparent',
+                  color: projectFilter === 'all' ? '#f26419' : 'var(--color-text-placeholder)',
                   fontSize: '0.65rem', cursor: 'pointer',
                 }}>All</button>
                 {projects.map(pr => (
@@ -295,9 +295,9 @@ export default function Tasks() {
                     {task.status !== 'completed' && (
                       <button onClick={() => toggleTimer(task.id)} style={{
                         padding: '0.3rem 0.625rem', borderRadius: '4px', border: '1px solid',
-                        borderColor: task.isTracking ? '#c9a96e55' : 'var(--color-border-subtle)',
-                        background: task.isTracking ? '#c9a96e11' : 'transparent',
-                        color: task.isTracking ? '#c9a96e' : 'var(--color-text-placeholder)',
+                        borderColor: task.isTracking ? '#f2641955' : 'var(--color-border-subtle)',
+                        background: task.isTracking ? '#f2641911' : 'transparent',
+                        color: task.isTracking ? '#f26419' : 'var(--color-text-placeholder)',
                         fontSize: '0.65rem', cursor: 'pointer', whiteSpace: 'nowrap' as const,
                       }}>
                         {task.isTracking ? '⏸ Stop' : '▷ Start'}

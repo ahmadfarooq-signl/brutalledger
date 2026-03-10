@@ -76,9 +76,9 @@ export default function Scorecard() {
               {(['week', 'month'] as const).map(p => (
                 <button key={p} onClick={() => setPeriod(p)} style={{
                   padding: '0.375rem 0.875rem', borderRadius: '5px', border: '1px solid',
-                  borderColor: period === p ? '#c9a96e55' : 'var(--color-border-subtle)',
-                  background: period === p ? '#c9a96e11' : 'transparent',
-                  color: period === p ? '#c9a96e' : 'var(--color-text-placeholder)',
+                  borderColor: period === p ? '#f2641955' : 'var(--color-border-subtle)',
+                  background: period === p ? '#f2641911' : 'transparent',
+                  color: period === p ? '#f26419' : 'var(--color-text-placeholder)',
                   fontSize: '0.7rem', cursor: 'pointer', letterSpacing: '0.08em', textTransform: 'capitalize' as const,
                 }}>{p}</button>
               ))}

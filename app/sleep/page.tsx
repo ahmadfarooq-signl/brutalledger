@@ -212,9 +212,9 @@ export default function Sleep() {
             {(['today', 'week', 'month'] as const).map(v => (
               <button key={v} onClick={() => setView(v)} style={{
                 padding: '0.375rem 0.875rem', borderRadius: '5px', border: '1px solid',
-                borderColor: view === v ? '#c9a96e55' : 'var(--color-border-subtle)',
-                background: view === v ? '#c9a96e11' : 'transparent',
-                color: view === v ? '#c9a96e' : 'var(--color-text-placeholder)',
+                borderColor: view === v ? '#f2641955' : 'var(--color-border-subtle)',
+                background: view === v ? '#f2641911' : 'transparent',
+                color: view === v ? '#f26419' : 'var(--color-text-placeholder)',
                 fontSize: '0.7rem', cursor: 'pointer', letterSpacing: '0.08em', textTransform: 'capitalize' as const,
               }}>{v}</button>
             ))}
@@ -246,7 +246,7 @@ export default function Sleep() {
                       {to12h(mainSleep.start)} → {to12h(mainSleep.end)}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <div style={{ fontFamily: 'var(--font-playfair)', fontSize: '1rem', color: '#c9a96e' }}>{calcHours(mainSleep.start, mainSleep.end)}h</div>
+                      <div style={{ fontFamily: 'var(--font-playfair)', fontSize: '1rem', color: '#f26419' }}>{calcHours(mainSleep.start, mainSleep.end)}h</div>
                       <button onClick={() => removeEntry('Main Sleep')} style={{ background: '#8b3a3a22', border: '1px solid #8b3a3a44', color: '#c0504d', borderRadius: '4px', padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: 'pointer' }}>×</button>
                     </div>
                   </div>
@@ -261,7 +261,7 @@ export default function Sleep() {
                     <div style={{ fontFamily: 'var(--font-playfair)', fontSize: '1.1rem', color: 'var(--color-text)' }}>{to12h(e.start)} → {to12h(e.end)}</div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <div style={{ fontFamily: 'var(--font-playfair)', fontSize: '1rem', color: '#c9a96e' }}>{calcHours(e.start, e.end)}h</div>
+                    <div style={{ fontFamily: 'var(--font-playfair)', fontSize: '1rem', color: '#f26419' }}>{calcHours(e.start, e.end)}h</div>
                     <button onClick={() => removeEntry(e.label)} style={{ background: '#8b3a3a22', border: '1px solid #8b3a3a44', color: '#c0504d', borderRadius: '4px', padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: 'pointer' }}>×</button>
                   </div>
                 </div>
@@ -300,12 +300,12 @@ export default function Sleep() {
                   const isFuture = d > new Date()
                   const maxH = 10
                   const pct = h ? Math.min((h / maxH) * 100, 100) : 0
-                  const color = isToday ? '#c9a96e' : isFuture ? 'var(--color-border)' : sleepColor(h)
+                  const color = isToday ? '#f26419' : isFuture ? 'var(--color-border)' : sleepColor(h)
                   return (
                     <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.375rem', height: '100%', justifyContent: 'flex-end' }}>
                       {h > 0 && <div style={{ fontSize: '0.6rem', color: 'var(--color-text-dim)' }}>{h}h</div>}
                       <div style={{ width: '100%', height: `${Math.max(pct, 0)}%`, background: color, borderRadius: '3px 3px 0 0', minHeight: h > 0 ? '4px' : '2px', transition: 'height 0.4s ease' }} />
-                      <div style={{ fontSize: '0.58rem', color: isToday ? '#c9a96e' : 'var(--color-text-placeholder)', textAlign: 'center' }}>{WEEK_DAYS[i]}<br />{d.getDate()}</div>
+                      <div style={{ fontSize: '0.58rem', color: isToday ? '#f26419' : 'var(--color-text-placeholder)', textAlign: 'center' }}>{WEEK_DAYS[i]}<br />{d.getDate()}</div>
                     </div>
                   )
                 })}
@@ -355,12 +355,12 @@ export default function Sleep() {
                       padding: '0.375rem 0.25rem',
                       borderRadius: '4px',
                       background: bgColor,
-                      border: `1px solid ${isToday ? '#c9a96e55' : 'transparent'}`,
+                      border: `1px solid ${isToday ? '#f2641955' : 'transparent'}`,
                       textAlign: 'center',
                       minHeight: '48px',
                       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.125rem',
                     }}>
-                      <div style={{ fontSize: '0.72rem', color: isToday ? '#c9a96e' : 'var(--color-text-muted)', fontWeight: isToday ? '700' : '400' }}>{d.getDate()}</div>
+                      <div style={{ fontSize: '0.72rem', color: isToday ? '#f26419' : 'var(--color-text-muted)', fontWeight: isToday ? '700' : '400' }}>{d.getDate()}</div>
                       {!isFuture && hasData && (
                         <div style={{ fontSize: '0.6rem', color: sleepColor(h) }}>{h}h</div>
                       )}

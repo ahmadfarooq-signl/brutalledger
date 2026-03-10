@@ -5,7 +5,7 @@ type Pillar = 'contrarian' | 'story' | 'tactical' | 'personal'
 type Post = { id: string; date: string; topic: string; pillar: Pillar; format: string; d7: number; d30: number; comments: number; cta: string }
 type KBEntry = { id: string; category: string; title: string; body: string; date: string; source: 'manual' | 'post_log' }
 
-const PILLAR_COLORS: Record<Pillar, string> = { contrarian: '#c0504d', story: '#c9a96e', tactical: '#5d9c70', personal: '#9b7fd4' }
+const PILLAR_COLORS: Record<Pillar, string> = { contrarian: '#c0504d', story: '#f26419', tactical: '#5d9c70', personal: '#9b7fd4' }
 const KB_CATEGORIES = ['Post Formulas', 'Hook Library', 'Viral Post Autopsies', 'Content Ideas', 'Pillar Definitions']
 const BG = 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=2560&q=80'
 
@@ -95,9 +95,9 @@ export default function Content() {
             {[{ key: 'log', label: 'Post Log' }, { key: 'kb', label: 'Knowledge Base' }].map(t => (
               <button key={t.key} onClick={() => setTab(t.key as 'log' | 'kb')} style={{
                 padding: '0.375rem 0.875rem', borderRadius: '5px', border: '1px solid',
-                borderColor: tab === t.key ? '#c9a96e55' : 'var(--color-border-subtle)',
-                background: tab === t.key ? '#c9a96e11' : 'transparent',
-                color: tab === t.key ? '#c9a96e' : 'var(--color-text-placeholder)',
+                borderColor: tab === t.key ? '#f2641955' : 'var(--color-border-subtle)',
+                background: tab === t.key ? '#f2641911' : 'transparent',
+                color: tab === t.key ? '#f26419' : 'var(--color-text-placeholder)',
                 fontSize: '0.7rem', cursor: 'pointer', letterSpacing: '0.08em',
               }}>{t.label}</button>
             ))}
@@ -200,9 +200,9 @@ export default function Content() {
                   {kbCategories.map(cat => (
                     <button key={cat} onClick={() => setKbFilter(cat)} style={{
                       padding: '0.25rem 0.625rem', borderRadius: '5px', border: '1px solid',
-                      borderColor: kbFilter === cat ? '#c9a96e55' : 'var(--color-border-subtle)',
-                      background: kbFilter === cat ? '#c9a96e11' : 'transparent',
-                      color: kbFilter === cat ? '#c9a96e' : 'var(--color-text-placeholder)',
+                      borderColor: kbFilter === cat ? '#f2641955' : 'var(--color-border-subtle)',
+                      background: kbFilter === cat ? '#f2641911' : 'transparent',
+                      color: kbFilter === cat ? '#f26419' : 'var(--color-text-placeholder)',
                       fontSize: '0.65rem', cursor: 'pointer',
                     }}>{cat === 'all' ? `All (${kbEntries.length})` : cat}</button>
                   ))}

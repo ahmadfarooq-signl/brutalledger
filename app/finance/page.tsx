@@ -18,7 +18,7 @@ const DEFAULT_EXP_CATS: CustomCat[] = [
 ]
 
 const BG = 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=2560&q=80'
-const PALETTE = ['#7a8fbc', '#5d9c70', '#c4a842', '#9b7fd4', '#8a8a94', '#c0504d', '#c9a96e', '#e07b5d']
+const PALETTE = ['#7a8fbc', '#5d9c70', '#c4a842', '#9b7fd4', '#8a8a94', '#c0504d', '#f26419', '#e07b5d']
 
 export default function Finance() {
   const [tab, setTab] = useState<'expenses' | 'income' | 'savings'>('expenses')
@@ -28,7 +28,7 @@ export default function Finance() {
   const [savingsTarget, setSavingsTarget] = useState(20000)
   const [expCategories, setExpCategories] = useState<CustomCat[]>(DEFAULT_EXP_CATS)
   const [showAddCat, setShowAddCat] = useState(false)
-  const [newCat, setNewCat] = useState({ name: '', color: '#c9a96e' })
+  const [newCat, setNewCat] = useState({ name: '', color: '#f26419' })
 
   const [newExp, setNewExp] = useState({ amount: '', category: 'personal', note: '' })
   const [newInc, setNewInc] = useState({ amount: '', type: 'salary' as EntryType, note: '' })
@@ -68,7 +68,7 @@ export default function Finance() {
   const addCategory = () => {
     if (!newCat.name.trim()) return
     setExpCategories(p => [...p, { id: Date.now().toString(), name: newCat.name.trim(), color: newCat.color }])
-    setNewCat({ name: '', color: '#c9a96e' })
+    setNewCat({ name: '', color: '#f26419' })
     setShowAddCat(false)
   }
 
@@ -106,9 +106,9 @@ export default function Finance() {
             {(['expenses', 'income', 'savings'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} style={{
                 padding: '0.375rem 0.875rem', borderRadius: '5px', border: '1px solid',
-                borderColor: tab === t ? '#c9a96e55' : 'var(--color-border-subtle)',
-                background: tab === t ? '#c9a96e11' : 'transparent',
-                color: tab === t ? '#c9a96e' : 'var(--color-text-placeholder)',
+                borderColor: tab === t ? '#f2641955' : 'var(--color-border-subtle)',
+                background: tab === t ? '#f2641911' : 'transparent',
+                color: tab === t ? '#f26419' : 'var(--color-text-placeholder)',
                 fontSize: '0.7rem', cursor: 'pointer', letterSpacing: '0.08em', textTransform: 'capitalize' as const,
               }}>{t}</button>
             ))}

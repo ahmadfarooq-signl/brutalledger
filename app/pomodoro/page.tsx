@@ -65,11 +65,11 @@ export default function Pomodoro() {
         {MODES.map((m, i) => (
           <button key={i} onClick={() => { setMode(i); setIsBreak(false); setTimeLeft(m.work); setRunning(false) }} style={{
             padding: '1rem', borderRadius: '8px', border: '1px solid',
-            borderColor: mode === i ? '#c9a96e55' : 'var(--color-border-subtle)',
-            background: mode === i ? '#c9a96e11' : 'var(--color-card)',
+            borderColor: mode === i ? '#f2641955' : 'var(--color-border-subtle)',
+            background: mode === i ? '#f2641911' : 'var(--color-card)',
             cursor: 'pointer', textAlign: 'left' as const,
           }}>
-            <div style={{ fontSize: '0.6rem', color: mode === i ? '#c9a96e' : 'var(--color-text-placeholder)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>{m.name}</div>
+            <div style={{ fontSize: '0.6rem', color: mode === i ? '#f26419' : 'var(--color-text-placeholder)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>{m.name}</div>
             <div style={{ fontFamily: 'var(--font-playfair)', fontSize: '1.1rem', fontWeight: '600', color: mode === i ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{m.label}</div>
             <div style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)', marginTop: '0.2rem' }}>min work / break</div>
           </button>
@@ -82,7 +82,7 @@ export default function Pomodoro() {
           <svg width="200" height="200" style={{ transform: 'rotate(-90deg)' }}>
             <circle cx="100" cy="100" r={radius} fill="none" stroke="var(--color-border)" strokeWidth="4" />
             <circle cx="100" cy="100" r={radius} fill="none"
-              stroke={isBreak ? '#4a7c59' : '#c9a96e'}
+              stroke={isBreak ? '#4a7c59' : '#f26419'}
               strokeWidth="4"
               strokeLinecap="round"
               strokeDasharray={circ}

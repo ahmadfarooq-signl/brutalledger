@@ -5,7 +5,7 @@ type Category = { id: string; name: string; color: string; custom?: boolean }
 type Block = { id: string; title: string; categoryId: string; date: string; start: string; end: string; notes: string }
 
 const DEFAULT_CATS: Category[] = [
-  { id: 'focus', name: 'Focus', color: '#c9a96e' },
+  { id: 'focus', name: 'Focus', color: '#f26419' },
   { id: 'meeting', name: 'Meeting', color: '#7a8fbc' },
   { id: 'exercise', name: 'Exercise', color: '#c0504d' },
   { id: 'study', name: 'Study', color: '#9b7fd4' },
@@ -20,7 +20,7 @@ const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const BG = 'https://images.unsplash.com/photo-1486325212027-8081e485255e?auto=format&fit=crop&w=2560&q=80'
 
-const PALETTE = ['#c9a96e', '#5d9c70', '#c0504d', '#9b7fd4', '#7a8fbc', '#c4a842', '#8a8a94', '#e07b5d', '#5b9bd4', '#b07fe0']
+const PALETTE = ['#f26419', '#5d9c70', '#c0504d', '#9b7fd4', '#7a8fbc', '#c4a842', '#8a8a94', '#e07b5d', '#5b9bd4', '#b07fe0']
 
 function getMonWeekDates(refDate: Date): Date[] {
   const d = new Date(refDate)
@@ -45,7 +45,7 @@ export default function Calendar() {
   const [showModal, setShowModal] = useState(false)
   const [showAddCat, setShowAddCat] = useState(false)
   const [newBlock, setNewBlock] = useState({ title: '', categoryId: 'focus', date: '', start: '09:00', end: '10:00', notes: '' })
-  const [newCat, setNewCat] = useState({ name: '', color: '#c9a96e' })
+  const [newCat, setNewCat] = useState({ name: '', color: '#f26419' })
 
   const weekDates = getMonWeekDates(refDate)
   const today = fmt(new Date())
@@ -79,7 +79,7 @@ export default function Calendar() {
     if (!newCat.name.trim()) return
     const cat: Category = { id: Date.now().toString(), name: newCat.name.trim(), color: newCat.color, custom: true }
     setCategories(p => [...p, cat])
-    setNewCat({ name: '', color: '#c9a96e' })
+    setNewCat({ name: '', color: '#f26419' })
     setShowAddCat(false)
   }
 
@@ -118,9 +118,9 @@ export default function Calendar() {
                 {(['week', 'day'] as const).map(v => (
                   <button key={v} onClick={() => setView(v)} style={{
                     padding: '0.375rem 0.75rem', borderRadius: '5px', border: '1px solid',
-                    borderColor: view === v ? '#c9a96e55' : 'var(--color-border-subtle)',
-                    background: view === v ? '#c9a96e11' : 'transparent',
-                    color: view === v ? '#c9a96e' : 'var(--color-text-placeholder)',
+                    borderColor: view === v ? '#f2641955' : 'var(--color-border-subtle)',
+                    background: view === v ? '#f2641911' : 'transparent',
+                    color: view === v ? '#f26419' : 'var(--color-text-placeholder)',
                     fontSize: '0.65rem', cursor: 'pointer', textTransform: 'capitalize' as const, letterSpacing: '0.08em',
                   }}>{v}</button>
                 ))}
@@ -181,8 +181,8 @@ export default function Calendar() {
                 const isToday = fmt(d) === today
                 return (
                   <div key={i} style={{ padding: '0.75rem 0.5rem', textAlign: 'center' as const, borderLeft: '1px solid var(--color-border-subtle)' }}>
-                    <div style={{ fontSize: '0.6rem', color: isToday ? '#c9a96e' : 'var(--color-text-placeholder)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.2rem' }}>{WEEK_DAYS[i]}</div>
-                    <div style={{ fontFamily: 'var(--font-playfair)', fontSize: '1rem', fontWeight: isToday ? '700' : '400', color: isToday ? '#c9a96e' : 'var(--color-text-muted)' }}>{d.getDate()}</div>
+                    <div style={{ fontSize: '0.6rem', color: isToday ? '#f26419' : 'var(--color-text-placeholder)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.2rem' }}>{WEEK_DAYS[i]}</div>
+                    <div style={{ fontFamily: 'var(--font-playfair)', fontSize: '1rem', fontWeight: isToday ? '700' : '400', color: isToday ? '#f26419' : 'var(--color-text-muted)' }}>{d.getDate()}</div>
                   </div>
                 )
               })}
@@ -201,7 +201,7 @@ export default function Calendar() {
                     return (
                       <div key={di} onClick={() => openModal(dateStr, hour)}
                         style={{ borderLeft: '1px solid var(--color-border-subtle)', padding: '2px', cursor: 'pointer', position: 'relative', minHeight: '44px' }}
-                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#c9a96e08'}
+                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#f2641908'}
                         onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
                         {slotBlocks.map(b => {
                           const cat = getCat(b.categoryId)
