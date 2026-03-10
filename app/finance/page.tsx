@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { fmtDateWithDay } from '@/lib/dateUtils'
 
 type EntryType = 'salary' | 'signl' | 'gift' | 'transfer' | 'other'
 type Income = { id: string; amount: number; type: EntryType; note: string; date: string }
@@ -242,7 +243,7 @@ export default function Finance() {
                           <span className="badge badge-green">{INCOME_TYPES[i.type]}</span>
                           <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{i.note}</span>
                         </div>
-                        <div style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)' }}>{i.date}</div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)' }}>{fmtDateWithDay(i.date)}</div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <div style={{ fontFamily: 'var(--font-playfair)', fontSize: '1rem', color: '#5d9c70' }}>+PKR {i.amount.toLocaleString()}</div>
@@ -294,7 +295,7 @@ export default function Finance() {
                   <div key={op.id} className="card" style={{ padding: '0.875rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                     <div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{op.reason || (op.dir === 'in' ? 'Savings deposit' : 'Withdrawal')}</div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)', marginTop: '0.2rem' }}>{op.date}</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)', marginTop: '0.2rem' }}>{fmtDateWithDay(op.date)}</div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                       <div style={{ fontFamily: 'var(--font-playfair)', fontSize: '1rem', color: op.dir === 'in' ? '#5d9c70' : '#c0504d' }}>

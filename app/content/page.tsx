@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { fmtDateWithDay } from '@/lib/dateUtils'
 
 type Pillar = 'contrarian' | 'story' | 'tactical' | 'personal'
 type Post = { id: string; date: string; topic: string; pillar: Pillar; format: string; d7: number; d30: number; comments: number; cta: string }
@@ -177,7 +178,7 @@ export default function Content() {
                     <tbody>
                       {posts.map((p, i) => (
                         <tr key={p.id} style={{ borderBottom: i < posts.length - 1 ? '1px solid var(--color-border-subtle)' : 'none' }}>
-                          <td style={{ padding: '0.625rem 0.875rem', fontSize: '0.72rem', color: 'var(--color-text-dim)' }}>{p.date}</td>
+                          <td style={{ padding: '0.625rem 0.875rem', fontSize: '0.72rem', color: 'var(--color-text-dim)' }}>{fmtDateWithDay(p.date)}</td>
                           <td style={{ padding: '0.625rem 0.875rem', fontSize: '0.78rem', color: 'var(--color-text-secondary)', maxWidth: '200px' }}>{p.topic}</td>
                           <td style={{ padding: '0.625rem 0.875rem' }}>
                             <span style={{ fontSize: '0.6rem', background: `${PILLAR_COLORS[p.pillar]}22`, color: PILLAR_COLORS[p.pillar], border: `1px solid ${PILLAR_COLORS[p.pillar]}33`, borderRadius: '3px', padding: '0.15rem 0.4rem', textTransform: 'capitalize' as const }}>{p.pillar}</span>
@@ -252,7 +253,7 @@ export default function Content() {
                           <span style={{ fontSize: '0.88rem', color: 'var(--color-text-secondary)', fontWeight: '500' }}>{entry.title}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                          <span style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)' }}>{entry.date}</span>
+                          <span style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)' }}>{fmtDateWithDay(entry.date)}</span>
                           <button onClick={() => deleteKBEntry(entry.id)} style={{ background: 'transparent', border: 'none', color: 'var(--color-text-placeholder)', cursor: 'pointer', fontSize: '0.85rem', padding: '0 0.2rem', lineHeight: 1 }}>×</button>
                         </div>
                       </div>

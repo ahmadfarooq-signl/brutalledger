@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { fmtDateWithDay } from '@/lib/dateUtils'
 
 type Status = 'warming' | 'dm_sent' | 'replied' | 'call_booked' | 'proposal_sent' | 'closed_won' | 'closed_lost'
 
@@ -178,7 +179,7 @@ export default function Outreach() {
                         )}
                       </div>
                       {p.notes && <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', lineHeight: 1.4, marginBottom: '0.375rem' }}>{p.notes}</div>}
-                      <div style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)' }}>Added {p.dateAdded}</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)' }}>Added {fmtDateWithDay(p.dateAdded)}</div>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem', flexShrink: 0 }}>

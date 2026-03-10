@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { fmtDateWithDay } from '@/lib/dateUtils'
 
 type Priority = 'high' | 'normal' | 'low'
 type Status = 'today' | 'active' | 'completed'
@@ -7,7 +8,7 @@ type Project = { id: string; name: string; color: string }
 type Task = {
   id: string; title: string; projectId: string; priority: Priority; status: Status;
   estimatedMins: number; loggedSecs: number; isTracking: boolean; trackStart: number | null;
-  dueDate: string
+  dueDate: string; completedAt?: string
 }
 
 const PRIORITY_COLORS: Record<Priority, string> = { high: '#c0504d', normal: '#f26419', low: '#55555f' }
@@ -23,7 +24,7 @@ function fmtTime(secs: number): string {
 
 const TODAY = new Date().toISOString().split('T')[0]
 
-const BLANK_TASK = { title: '', projectId: '', priority: 'normal' as Priority, status: 'today' as Status, estimatedMins: '', dueDate: TODAY }
+const BLANK_TASK = { title: '', projectId: '', priority: 'normal' as Priority, estimatedMins: '', dueDate: TODAY }
 
 export default function Tasks() {
   const [projects, setProjects] = useState<Project[]>(() => {
@@ -62,6 +63,7 @@ export default function Tasks() {
       ...newTask,
       projectId,
       id: Date.now().toString(),
+      status: 'today',
       estimatedMins: Number(newTask.estimatedMins) || 0,
       loggedSecs: 0,
       isTracking: false,
@@ -87,7 +89,6 @@ export default function Tasks() {
       title: task.title,
       projectId: task.projectId,
       priority: task.priority,
-      status: task.status,
       estimatedMins: task.estimatedMins > 0 ? task.estimatedMins.toString() : '',
       dueDate: task.dueDate || TODAY,
     })
@@ -100,7 +101,6 @@ export default function Tasks() {
       title: editTask.title,
       projectId: editTask.projectId || t.projectId,
       priority: editTask.priority,
-      status: editTask.status,
       estimatedMins: Number(editTask.estimatedMins) || 0,
       dueDate: editTask.dueDate,
     } : t))
@@ -138,14 +138,16 @@ export default function Tasks() {
     if (projectFilter === id) setProjectFilter('all')
   }
 
-  const completeTask = (id: string) => {
+  const toggleComplete = (id: string) => {
     const now = Date.now()
     setTasks(prev => prev.map(t => {
-      if (t.id === id) {
-        const extra = t.isTracking ? Math.floor((now - (t.trackStart || now)) / 1000) : 0
-        return { ...t, status: 'completed', isTracking: false, trackStart: null, loggedSecs: t.loggedSecs + extra }
+      if (t.id !== id) return t
+      if (t.status === 'completed') {
+        // uncomplete
+        return { ...t, status: 'active', completedAt: undefined }
       }
-      return t
+      const extra = t.isTracking ? Math.floor((now - (t.trackStart || now)) / 1000) : 0
+      return { ...t, status: 'completed', isTracking: false, trackStart: null, loggedSecs: t.loggedSecs + extra, completedAt: new Date().toISOString() }
     }))
     if (activeTaskId === id) setActiveTaskId(null)
   }
@@ -170,7 +172,7 @@ export default function Tasks() {
       <input placeholder="Task title" className="input-dark" style={{ marginBottom: '0.625rem' }} value={obj.title}
         onChange={e => set(p => ({ ...p, title: e.target.value }))}
         onKeyDown={e => e.key === 'Enter' && onSubmit()} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.625rem', marginBottom: '0.75rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.625rem', marginBottom: '0.75rem' }}>
         <select className="input-dark" value={obj.projectId} onChange={e => set(p => ({ ...p, projectId: e.target.value }))}>
           {projects.length === 0 && <option value="">No projects</option>}
           {projects.map(pr => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
@@ -179,11 +181,6 @@ export default function Tasks() {
           <option value="high">High</option>
           <option value="normal">Normal</option>
           <option value="low">Low</option>
-        </select>
-        <select className="input-dark" value={obj.status} onChange={e => set(p => ({ ...p, status: e.target.value as Status }))}>
-          <option value="today">Today</option>
-          <option value="active">Active</option>
-          <option value="completed">Completed</option>
         </select>
         <input type="number" placeholder="Est. minutes" className="input-dark" value={obj.estimatedMins}
           onChange={e => set(p => ({ ...p, estimatedMins: e.target.value }))} />
@@ -327,6 +324,7 @@ export default function Tasks() {
                 const project = projects.find(p => p.id === task.projectId)
                 const elapsedSecs = getElapsedSecs(task)
                 const isEditing = editingTaskId === task.id
+                const isCompleted = task.status === 'completed'
 
                 if (isEditing) {
                   return (
@@ -338,23 +336,44 @@ export default function Tasks() {
                 }
 
                 return (
-                  <div key={task.id} className="card" style={{ padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.875rem', opacity: task.status === 'completed' ? 0.5 : 1 }}>
-                    <input type="checkbox" className="checkbox-custom" checked={task.status === 'completed'} onChange={() => completeTask(task.id)} />
+                  <div key={task.id} className="card" style={{ padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.875rem', opacity: isCompleted ? 0.65 : 1 }}>
+                    <input
+                      type="checkbox"
+                      className="checkbox-custom"
+                      checked={isCompleted}
+                      onChange={() => toggleComplete(task.id)}
+                      title={isCompleted ? 'Mark incomplete' : 'Mark complete'}
+                    />
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
-                        <span style={{ fontSize: '0.82rem', color: task.status === 'completed' ? 'var(--color-text-placeholder)' : 'var(--color-text-secondary)', textDecoration: task.status === 'completed' ? 'line-through' : 'none' }}>{task.title}</span>
-                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: PRIORITY_COLORS[task.priority], flexShrink: 0 }} title={task.priority} />
+                        <span style={{ fontSize: '0.82rem', color: isCompleted ? 'var(--color-text-placeholder)' : 'var(--color-text-secondary)', textDecoration: isCompleted ? 'line-through' : 'none' }}>{task.title}</span>
+                        {!isCompleted && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: PRIORITY_COLORS[task.priority], flexShrink: 0 }} title={task.priority} />}
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' as const }}>
                         {project && <span style={{ fontSize: '0.6rem', background: `${project.color}22`, color: project.color, border: `1px solid ${project.color}33`, borderRadius: '3px', padding: '0.1rem 0.35rem' }}>{project.name}</span>}
-                        {task.dueDate && <span style={{ fontSize: '0.6rem', color: task.dueDate < TODAY && task.status !== 'completed' ? '#c0504d' : 'var(--color-text-placeholder)' }}>{task.dueDate}</span>}
-                        {elapsedSecs > 0 && <span style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)' }}>{fmtTime(elapsedSecs)} logged</span>}
-                        {task.estimatedMins > 0 && <span style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)' }}>/ {task.estimatedMins}m est.</span>}
+                        {task.dueDate && !isCompleted && (
+                          <span style={{ fontSize: '0.6rem', color: task.dueDate < TODAY ? '#c0504d' : 'var(--color-text-placeholder)' }}>
+                            Due {fmtDateWithDay(task.dueDate)}
+                          </span>
+                        )}
+                        {isCompleted && task.completedAt && (
+                          <span style={{ fontSize: '0.6rem', color: '#5d9c70' }}>
+                            Done {fmtDateWithDay(task.completedAt.split('T')[0])}
+                          </span>
+                        )}
+                        {elapsedSecs > 0 && (
+                          <span style={{ fontSize: '0.65rem', color: isCompleted ? '#5d9c70' : 'var(--color-text-placeholder)', fontWeight: isCompleted ? '600' : '400' }}>
+                            {fmtTime(elapsedSecs)} logged
+                          </span>
+                        )}
+                        {task.estimatedMins > 0 && !isCompleted && <span style={{ fontSize: '0.65rem', color: 'var(--color-text-placeholder)' }}>/ {task.estimatedMins}m est.</span>}
                       </div>
                     </div>
-                    <button onClick={() => startEdit(task)} style={{ background: 'transparent', border: '1px solid var(--color-border-subtle)', color: 'var(--color-text-placeholder)', cursor: 'pointer', fontSize: '0.6rem', padding: '0.2rem 0.5rem', borderRadius: '4px', flexShrink: 0, letterSpacing: '0.04em' }}>Edit</button>
+                    {!isCompleted && (
+                      <button onClick={() => startEdit(task)} style={{ background: 'transparent', border: '1px solid var(--color-border-subtle)', color: 'var(--color-text-placeholder)', cursor: 'pointer', fontSize: '0.6rem', padding: '0.2rem 0.5rem', borderRadius: '4px', flexShrink: 0, letterSpacing: '0.04em' }}>Edit</button>
+                    )}
                     <button onClick={() => deleteTask(task.id)} style={{ background: '#8b3a3a15', border: '1px solid #8b3a3a33', color: '#c0504d', borderRadius: '4px', padding: '0.2rem 0.5rem', fontSize: '0.6rem', cursor: 'pointer', letterSpacing: '0.04em', flexShrink: 0 }}>Del</button>
-                    {task.status !== 'completed' && (
+                    {!isCompleted && (
                       <button onClick={() => toggleTimer(task.id)} style={{
                         padding: '0.3rem 0.625rem', borderRadius: '4px', border: '1px solid',
                         borderColor: task.isTracking ? '#f2641955' : 'var(--color-border-subtle)',

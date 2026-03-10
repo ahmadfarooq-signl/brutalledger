@@ -1,7 +1,10 @@
 'use client'
 import { useState, useEffect } from 'react'
 
-const HABITS = {
+type Habit = { id: string; label: string; auto: boolean; custom?: boolean }
+type HabitsMap = Record<string, Habit[]>
+
+const DEFAULT_HABITS: HabitsMap = {
   prayers: [
     { id: 'fajr', label: 'Fajr on time', auto: false },
     { id: 'zuhr', label: 'Zuhr on time', auto: false },
@@ -57,18 +60,32 @@ function getMonthDays(year: number, month: number): (Date | null)[] {
 }
 
 export default function Habits() {
-  const allHabits = Object.values(HABITS).flat()
   const today = fmt(new Date())
   const now = new Date()
 
-  // records[dateStr][habitId] = boolean
+  const [customHabits, setCustomHabits] = useState<HabitsMap>(() => {
+    try { return JSON.parse(localStorage.getItem('bl-habits-custom') || '{}') } catch { return {} }
+  })
+
+  // Merge default + custom habits per category
+  const habitsMap: HabitsMap = Object.fromEntries(
+    Object.keys(DEFAULT_HABITS).map(cat => [
+      cat,
+      [...DEFAULT_HABITS[cat], ...(customHabits[cat] || [])]
+    ])
+  )
+  const allHabits = Object.values(habitsMap).flat()
+
   const [records, setRecords] = useState<Record<string, Record<string, boolean>>>(() => {
     try { return JSON.parse(localStorage.getItem('bl-habits-records') || '{}') } catch { return {} }
   })
   const [view, setView] = useState<'today' | 'week' | 'month'>('today')
   const [monthRef, setMonthRef] = useState({ year: now.getFullYear(), month: now.getMonth() })
+  const [addingTo, setAddingTo] = useState<string | null>(null)
+  const [newLabel, setNewLabel] = useState('')
 
   useEffect(() => { localStorage.setItem('bl-habits-records', JSON.stringify(records)) }, [records])
+  useEffect(() => { localStorage.setItem('bl-habits-custom', JSON.stringify(customHabits)) }, [customHabits])
 
   const todayRec = records[today] || {}
   const toggle = (id: string, val: boolean) => {
@@ -76,6 +93,34 @@ export default function Habits() {
       ...prev,
       [today]: { ...(prev[today] || {}), [id]: val }
     }))
+  }
+
+  const addHabit = (cat: string) => {
+    const label = newLabel.trim()
+    if (!label) return
+    const id = `custom_${cat}_${Date.now()}`
+    setCustomHabits(prev => ({
+      ...prev,
+      [cat]: [...(prev[cat] || []), { id, label, auto: false, custom: true }]
+    }))
+    setNewLabel('')
+    setAddingTo(null)
+  }
+
+  const deleteHabit = (cat: string, id: string) => {
+    setCustomHabits(prev => ({
+      ...prev,
+      [cat]: (prev[cat] || []).filter(h => h.id !== id)
+    }))
+    // Clear any records for this habit
+    setRecords(prev => {
+      const updated: typeof prev = {}
+      for (const date in prev) {
+        const { [id]: _, ...rest } = prev[date]
+        updated[date] = rest
+      }
+      return updated
+    })
   }
 
   const done = allHabits.filter(h => todayRec[h.id]).length
@@ -154,7 +199,7 @@ export default function Habits() {
 
           {/* TODAY VIEW */}
           {view === 'today' && (
-            Object.entries(HABITS).map(([cat, habits]) => (
+            Object.entries(habitsMap).map(([cat, habits]) => (
               <div key={cat} className="card" style={{ padding: '1.25rem', marginBottom: '0.875rem' }}>
                 <div style={{ fontSize: '0.6rem', color: 'var(--color-text-placeholder)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.75rem', paddingBottom: '0.625rem', borderBottom: '1px solid var(--color-border-subtle)' }}>
                   {CAT_LABELS[cat]}
@@ -173,10 +218,52 @@ export default function Habits() {
                         </span>
                         {h.auto && <span className="badge badge-accent" style={{ fontSize: '0.55rem' }}>Auto</span>}
                       </div>
+                      {h.custom && (
+                        <button
+                          onClick={() => deleteHabit(cat, h.id)}
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-placeholder)', fontSize: '0.75rem', padding: '0 0.25rem', lineHeight: 1, opacity: 0.5 }}
+                          title="Remove habit"
+                        >×</button>
+                      )}
                     </div>
                     {i < habits.length - 1 && <div className="divider" />}
                   </div>
                 ))}
+
+                {/* Add habit row */}
+                {addingTo === cat ? (
+                  <div style={{ marginTop: '0.625rem', paddingTop: '0.625rem', borderTop: '1px solid var(--color-border-subtle)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <input
+                      autoFocus
+                      type="text"
+                      value={newLabel}
+                      onChange={e => setNewLabel(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') addHabit(cat); if (e.key === 'Escape') { setAddingTo(null); setNewLabel('') } }}
+                      placeholder="Habit name..."
+                      style={{
+                        flex: 1, fontSize: '0.8rem', padding: '0.375rem 0.625rem',
+                        border: '1px solid var(--color-border-subtle)', borderRadius: '5px',
+                        background: 'var(--color-bg)', color: 'var(--color-text)',
+                        outline: 'none',
+                      }}
+                    />
+                    <button
+                      onClick={() => addHabit(cat)}
+                      style={{ fontSize: '0.72rem', padding: '0.375rem 0.75rem', borderRadius: '5px', border: '1px solid #f2641955', background: '#f2641911', color: '#f26419', cursor: 'pointer' }}
+                    >Add</button>
+                    <button
+                      onClick={() => { setAddingTo(null); setNewLabel('') }}
+                      style={{ fontSize: '0.72rem', padding: '0.375rem 0.625rem', borderRadius: '5px', border: '1px solid var(--color-border-subtle)', background: 'transparent', color: 'var(--color-text-placeholder)', cursor: 'pointer' }}
+                    >Cancel</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setAddingTo(cat); setNewLabel('') }}
+                    style={{ marginTop: '0.625rem', paddingTop: '0.625rem', borderTop: '1px solid var(--color-border-subtle)', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.72rem', color: 'var(--color-text-placeholder)', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
+                  >
+                    <span style={{ fontSize: '1rem', lineHeight: 1 }}>+</span> Add habit
+                  </button>
+                )}
               </div>
             ))
           )}
@@ -203,7 +290,7 @@ export default function Habits() {
                   })}
                 </div>
                 {/* Habit rows */}
-                {Object.entries(HABITS).map(([cat, habits]) => (
+                {Object.entries(habitsMap).map(([cat, habits]) => (
                   <div key={cat}>
                     <div style={{ fontSize: '0.55rem', color: '#f26419', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '0.5rem 0 0.25rem', borderTop: '1px solid var(--color-border-subtle)' }}>{CAT_LABELS[cat]}</div>
                     {habits.map(h => (
