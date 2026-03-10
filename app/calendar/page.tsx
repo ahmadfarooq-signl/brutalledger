@@ -3,8 +3,18 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
 
 type Category = { id: string; name: string; color: string; custom?: boolean }
-type Block = { id: string; title: string; categoryId: string; date: string; start: string; end: string; notes: string }
-type GEvent = { id: string; summary: string; start: { dateTime?: string; date?: string }; end: { dateTime?: string; date?: string }; description?: string }
+type Block    = { id: string; title: string; categoryId: string; date: string; start: string; end: string; notes: string }
+type GEvent   = { id: string; summary: string; start: { dateTime?: string; date?: string }; end: { dateTime?: string; date?: string } }
+
+// Unified event for rendering
+type RenderEv = { id: string; title: string; startMins: number; endMins: number; color: string; isGoogle: boolean }
+// After layout calculation
+type LayoutEv = RenderEv & { col: number; totalCols: number }
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+const PX_PER_MIN = 1          // 1px = 1 minute → 1440px total
+const TOTAL_H    = 24 * 60    // 1440px
+const GUTTER_W   = 56         // time label column width
 
 const DEFAULT_CATS: Category[] = [
   { id: 'prayer',   name: 'Prayer',   color: '#a0845c' },
@@ -17,50 +27,36 @@ const DEFAULT_CATS: Category[] = [
   { id: 'meeting',  name: 'Meeting',  color: '#8a8a94' },
 ]
 
-const SEED_BLOCKS: Block[] = [
-  { id:'s1',  date:'2026-03-11', start:'04:50', end:'05:20', categoryId:'prayer',   title:'Wake + Wudu',             notes:'Get up. Do not go back to sleep.' },
-  { id:'s2',  date:'2026-03-11', start:'05:20', end:'05:30', categoryId:'prayer',   title:'Fajr',                    notes:'Pray.' },
-  { id:'s3',  date:'2026-03-11', start:'05:30', end:'06:00', categoryId:'exercise', title:'Run',                     notes:'30 min outside. No phone.' },
-  { id:'s4',  date:'2026-03-11', start:'06:00', end:'06:30', categoryId:'personal', title:'Morning routine',         notes:'Shower · breakfast · 1L water before 7AM' },
-  { id:'s5',  date:'2026-03-11', start:'06:30', end:'07:00', categoryId:'focus',    title:'Deep Work 1',             notes:'Rewrite LinkedIn headline + About section' },
-  { id:'s6',  date:'2026-03-11', start:'07:00', end:'07:30', categoryId:'focus',    title:'Deep Work 1',             notes:'DM Nick — get written testimonial. Screenshot his follower count.' },
-  { id:'s7',  date:'2026-03-11', start:'07:30', end:'08:00', categoryId:'focus',    title:'Deep Work 1',             notes:'Verify + fix case study numbers. Update featured section.' },
-  { id:'s8',  date:'2026-03-11', start:'08:00', end:'08:15', categoryId:'prayer',   title:'Quran',                   notes:'15 min with meaning' },
-  { id:'s9',  date:'2026-03-11', start:'08:15', end:'08:45', categoryId:'outreach', title:'Deep Work 2',             notes:'Build Notion CRM — columns: Name, LinkedIn URL, Followers, Stage, Notes' },
-  { id:'s10', date:'2026-03-11', start:'08:45', end:'09:30', categoryId:'outreach', title:'Deep Work 2',             notes:'Prospect batch 1 — find 25 SaaS founders (500–5K followers)' },
-  { id:'s11', date:'2026-03-11', start:'09:30', end:'10:00', categoryId:'focus',    title:'Deep Work 2',             notes:'Write Sales Call Script (Section 3b framework)' },
-  { id:'s12', date:'2026-03-11', start:'10:00', end:'10:30', categoryId:'personal', title:'Break',                   notes:'Tea + movement. 30 min. Intentional.' },
-  { id:'s13', date:'2026-03-11', start:'10:30', end:'10:45', categoryId:'finance',  title:'Deep Work 3',             notes:'Confirm Elevate verification status' },
-  { id:'s14', date:'2026-03-11', start:'10:45', end:'11:00', categoryId:'finance',  title:'Deep Work 3',             notes:'Set up Calendly (free, 15 min booking)' },
-  { id:'s15', date:'2026-03-11', start:'11:00', end:'11:30', categoryId:'finance',  title:'Deep Work 3',             notes:'Create invoice template in Canva' },
-  { id:'s16', date:'2026-03-11', start:'11:30', end:'12:00', categoryId:'content',  title:'Deep Work 3',             notes:'Plan SIGNL Branding — colours, both logo variants, Canva banner' },
-  { id:'s17', date:'2026-03-11', start:'12:00', end:'12:30', categoryId:'content',  title:'Deep Work 3',             notes:'Plan Content Theme + Post Types for March' },
-  { id:'s18', date:'2026-03-11', start:'12:30', end:'13:15', categoryId:'prayer',   title:'Dhuhr + Lunch + Rest',    notes:'Pray. Eat. Rest 30–45 min. Biology.' },
-  { id:'s19', date:'2026-03-11', start:'13:15', end:'14:00', categoryId:'content',  title:'Afternoon block',         notes:'Write LinkedIn Post 1 — Mar 11 ("I got laid off today. Here\'s what I\'m building.")' },
-  { id:'s20', date:'2026-03-11', start:'14:00', end:'14:30', categoryId:'content',  title:'Afternoon block',         notes:'Write LinkedIn Post 2 — Mar 13 contrarian draft' },
-  { id:'s21', date:'2026-03-11', start:'14:30', end:'15:00', categoryId:'content',  title:'Afternoon block',         notes:'Plan Brand Identity — Twitter personal branding (bio, header, pinned)' },
-  { id:'s22', date:'2026-03-11', start:'15:00', end:'15:30', categoryId:'outreach', title:'Afternoon block',         notes:'Write LinkedIn DM template (4-part framework)' },
-  { id:'s23', date:'2026-03-11', start:'15:30', end:'16:00', categoryId:'prayer',   title:'Asr + walk',              notes:'Pray. 10 min walk.' },
-  { id:'s24', date:'2026-03-11', start:'16:00', end:'16:45', categoryId:'personal', title:'Reading',                 notes:'Books only. No phone. 45 min.' },
-  { id:'s25', date:'2026-03-11', start:'16:45', end:'17:15', categoryId:'outreach', title:'Afternoon block',         notes:'Write cold email template (Apollo framework)' },
-  { id:'s26', date:'2026-03-11', start:'17:15', end:'18:00', categoryId:'finance',  title:'Afternoon block',         notes:'Plan Audit Deliverables in depth — 7 dimensions, Loom structure' },
-  { id:'s27', date:'2026-03-11', start:'18:00', end:'18:45', categoryId:'focus',    title:'Afternoon block',         notes:'Setup LinkedIn Company Page (SIGNL) — about, logo, banner' },
-  { id:'s28', date:'2026-03-11', start:'18:45', end:'19:00', categoryId:'personal', title:'Free / family',           notes:'Stop. Be present.' },
-  { id:'s29', date:'2026-03-11', start:'19:00', end:'19:30', categoryId:'prayer',   title:'Maghrib + family dinner', notes:'Pray. Eat with family.' },
-  { id:'s30', date:'2026-03-11', start:'19:30', end:'20:30', categoryId:'outreach', title:'Strategic block',         notes:'20 Cold DMs — send all 20. Track in Notion.' },
-  { id:'s31', date:'2026-03-11', start:'20:30', end:'21:15', categoryId:'content',  title:'Strategic block',         notes:'Write first Twitter post batch — adapt 3 posts from LinkedIn drafts' },
-  { id:'s32', date:'2026-03-11', start:'21:15', end:'21:45', categoryId:'finance',  title:'Strategic block',         notes:'Create Editable Invoicing System — Notion or Canva, all offer types' },
-  { id:'s33', date:'2026-03-11', start:'21:45', end:'22:00', categoryId:'focus',    title:'Strategic block',         notes:'Fill Prospect List — add 25 more (batch 2 start, total 50)' },
-  { id:'s34', date:'2026-03-11', start:'22:00', end:'22:15', categoryId:'prayer',   title:'Isha',                    notes:'Pray.' },
-  { id:'s35', date:'2026-03-11', start:'22:15', end:'22:30', categoryId:'personal', title:'Wind down',               notes:'Write 3 things that moved forward. Tomorrow\'s top 3. Phone down. Sleep by 10:30.' },
-]
-
-const HOURS = Array.from({ length: 24 }, (_, i) => i)
-const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const BG = 'https://images.unsplash.com/photo-1486325212027-8081e485255e?auto=format&fit=crop&w=2560&q=80'
-const PALETTE = ['#f26419','#5d9c70','#c0504d','#9b7fd4','#7a8fbc','#c4a842','#8a8a94','#e07b5d','#5b9bd4','#a0845c']
+const WEEK_DAYS  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+const PALETTE    = ['#f26419','#5d9c70','#c0504d','#9b7fd4','#7a8fbc','#c4a842','#8a8a94','#e07b5d','#5b9bd4','#a0845c']
 const GCAL_COLOR = '#4285F4'
-const ROW_H = 64
+const BG         = 'https://images.unsplash.com/photo-1486325212027-8081e485255e?auto=format&fit=crop&w=2560&q=80'
+const HOURS      = Array.from({ length: 24 }, (_, i) => i)
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function fmt(d: Date) { return d.toISOString().split('T')[0] }
+
+function toMins(t: string) {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + (m || 0)
+}
+
+function minsToTime(m: number) {
+  const h = Math.floor(m / 60), min = m % 60
+  return `${h.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}`
+}
+
+function fmtHour(h: number) {
+  if (h === 0)  return '12 AM'
+  if (h === 12) return '12 PM'
+  return h > 12 ? `${h - 12} PM` : `${h} AM`
+}
+
+function fmtTime12(mins: number) {
+  const h = Math.floor(mins / 60), m = mins % 60
+  const ampm = h >= 12 ? 'pm' : 'am'
+  return `${h % 12 || 12}:${m.toString().padStart(2,'0')}${ampm}`
+}
 
 function getMonWeekDates(ref: Date): Date[] {
   const day = ref.getDay()
@@ -72,90 +68,100 @@ function getMonWeekDates(ref: Date): Date[] {
   })
 }
 
-function fmt(d: Date) { return d.toISOString().split('T')[0] }
+// ─── Overlap layout (Google Calendar algorithm) ───────────────────────────────
+function computeLayout(evs: RenderEv[]): LayoutEv[] {
+  if (!evs.length) return []
+  const sorted = [...evs].sort((a, b) => a.startMins - b.startMins || b.endMins - a.endMins)
 
-function fmtHour(h: number) {
-  if (h === 0) return ''
-  if (h === 12) return '12 PM'
-  return h > 12 ? `${h - 12} PM` : `${h} AM`
+  // Find overlapping groups, then assign lanes within each group
+  const result: LayoutEv[] = []
+  let i = 0
+
+  while (i < sorted.length) {
+    const group: RenderEv[] = [sorted[i]]
+    let maxEnd = sorted[i].endMins
+    let j = i + 1
+    while (j < sorted.length && sorted[j].startMins < maxEnd) {
+      maxEnd = Math.max(maxEnd, sorted[j].endMins)
+      group.push(sorted[j])
+      j++
+    }
+
+    // Assign a column lane to each event in the group
+    const lanes: number[] = [] // lanes[k] = end time of last event placed in lane k
+    const assignments: Record<string, number> = {}
+    group.forEach(ev => {
+      let lane = lanes.findIndex(end => end <= ev.startMins)
+      if (lane === -1) lane = lanes.length
+      lanes[lane] = ev.endMins
+      assignments[ev.id] = lane
+    })
+
+    const totalCols = lanes.length
+    group.forEach(ev => {
+      result.push({ ...ev, col: assignments[ev.id], totalCols })
+    })
+
+    i = j
+  }
+
+  return result
 }
 
-function fmtEvTime(dt: string) {
-  const d = new Date(dt)
-  const h = d.getHours(), m = d.getMinutes()
-  return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`
-}
-
-function getEventHour(ev: GEvent) {
-  return ev.start.dateTime ? new Date(ev.start.dateTime).getHours() : -1
-}
-function getEventDate(ev: GEvent) {
-  return ev.start.dateTime ? ev.start.dateTime.split('T')[0] : (ev.start.date || '')
-}
-
-function parseMins(t: string) {
-  const [h, m] = t.split(':').map(Number)
-  return h * 60 + m
-}
+// ─── Component ───────────────────────────────────────────────────────────────
+type Popup = { clientX: number; clientY: number; date: string; start: string; end: string; title: string }
 
 export default function Calendar() {
   const { data: session, status } = useSession()
-  const [view, setView] = useState<'week' | 'day'>('week')
+  const [view, setView]       = useState<'week' | 'day'>('week')
   const [refDate, setRefDate] = useState(new Date())
 
   const [categories, setCategories] = useState<Category[]>(() => {
     try {
       const stored: Category[] = JSON.parse(localStorage.getItem('bl-cal-categories') || 'null')
       if (!stored) return DEFAULT_CATS
-      // Merge in any new default categories not yet in stored
       const ids = new Set(stored.map(c => c.id))
-      const merged = [...stored]
-      DEFAULT_CATS.forEach(dc => { if (!ids.has(dc.id)) merged.unshift(dc) })
-      return merged
+      return [...DEFAULT_CATS.filter(d => !ids.has(d.id)), ...stored]
     } catch { return DEFAULT_CATS }
   })
 
   const [blocks, setBlocks] = useState<Block[]>(() => {
-    try {
-      const stored: Block[] = JSON.parse(localStorage.getItem('bl-cal-blocks') || '[]')
-      // Add seed blocks if not already present
-      const seedIds = new Set(SEED_BLOCKS.map(b => b.id))
-      const existingSeedIds = new Set(stored.filter(b => seedIds.has(b.id)).map(b => b.id))
-      const missing = SEED_BLOCKS.filter(b => !existingSeedIds.has(b.id))
-      return [...missing, ...stored]
-    } catch { return SEED_BLOCKS }
+    try { return JSON.parse(localStorage.getItem('bl-cal-blocks') || '[]') } catch { return [] }
   })
 
-  const [gEvents, setGEvents] = useState<GEvent[]>([])
+  const [gEvents,  setGEvents]  = useState<GEvent[]>([])
   const [gLoading, setGLoading] = useState(false)
-  const [showModal, setShowModal] = useState(false)
+  const [popup,    setPopup]    = useState<Popup | null>(null)
   const [showAddCat, setShowAddCat] = useState(false)
+  const [newCat,   setNewCat]   = useState({ name: '', color: '#f26419' })
+  const [now, setNow]           = useState(new Date())
   const [syncToGoogle, setSyncToGoogle] = useState(false)
-  const [newBlock, setNewBlock] = useState({ title: '', categoryId: 'focus', date: '', start: '09:00', end: '10:00', notes: '' })
-  const [newCat, setNewCat] = useState({ name: '', color: '#f26419' })
-  const [now, setNow] = useState(new Date())
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { localStorage.setItem('bl-cal-categories', JSON.stringify(categories)) }, [categories])
-  useEffect(() => { localStorage.setItem('bl-cal-blocks', JSON.stringify(blocks)) }, [blocks])
+  useEffect(() => { localStorage.setItem('bl-cal-blocks',     JSON.stringify(blocks))     }, [blocks])
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t) }, [])
 
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 60000)
-    return () => clearInterval(t)
-  }, [])
-
+  // Auto-scroll to current time on mount
   useEffect(() => {
     if (scrollRef.current) {
-      const h = new Date().getHours()
-      scrollRef.current.scrollTop = Math.max(0, (h - 2) * ROW_H)
+      const mins = new Date().getHours() * 60 + new Date().getMinutes()
+      scrollRef.current.scrollTop = Math.max(0, mins * PX_PER_MIN - 120)
     }
   }, [])
 
-  const weekDates = getMonWeekDates(refDate)
-  const today = fmt(new Date())
-  const currentHour = now.getHours()
-  const currentMins = now.getMinutes()
+  // Close popup on Escape
+  useEffect(() => {
+    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') setPopup(null) }
+    window.addEventListener('keydown', fn)
+    return () => window.removeEventListener('keydown', fn)
+  }, [])
 
+  const weekDates = getMonWeekDates(refDate)
+  const today     = fmt(new Date())
+  const nowMins   = now.getHours() * 60 + now.getMinutes()
+
+  // ── Fetch Google events ───────────────────────────────────────────────────
   const fetchGEvents = useCallback(async (dates: Date[]) => {
     if (!session?.access_token) return
     setGLoading(true)
@@ -173,90 +179,109 @@ export default function Calendar() {
     if (session?.access_token) fetchGEvents(weekDates)
   }, [session?.access_token, refDate]) // eslint-disable-line
 
-  const goBack    = () => { const d = new Date(refDate); d.setDate(d.getDate() - (view === 'week' ? 7 : 1)); setRefDate(d) }
-  const goForward = () => { const d = new Date(refDate); d.setDate(d.getDate() + (view === 'week' ? 7 : 1)); setRefDate(d) }
+  // ── Navigation ────────────────────────────────────────────────────────────
+  const shift = (n: number) => { const d = new Date(refDate); d.setDate(d.getDate() + n); setRefDate(d) }
+  const goBack    = () => shift(view === 'week' ? -7 : -1)
+  const goForward = () => shift(view === 'week' ?  7 :  1)
   const goToday   = () => setRefDate(new Date())
-
-  const openModal = (date: string, hour: number) => {
-    const h = hour.toString().padStart(2, '0')
-    const h2 = (hour + 1).toString().padStart(2, '0')
-    setNewBlock(p => ({ ...p, date, start: `${h}:00`, end: `${h2}:00` }))
-    setShowModal(true)
-  }
-
-  const addBlock = async () => {
-    if (!newBlock.title) return
-    setBlocks(p => [{ ...newBlock, id: Date.now().toString() }, ...p])
-    if (syncToGoogle && session?.access_token) {
-      try {
-        await fetch('/api/calendar/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newBlock) })
-        await fetchGEvents(weekDates)
-      } catch { /* silent */ }
-    }
-    setShowModal(false)
-    setNewBlock({ title: '', categoryId: 'focus', date: '', start: '09:00', end: '10:00', notes: '' })
-    setSyncToGoogle(false)
-  }
-
-  const getCat = (id: string) => categories.find(c => c.id === id) || categories[0]
-
-  // Return all blocks that overlap with this hour slot
-  const getBlocksForSlot = (date: string, hour: number) =>
-    blocks.filter(b => {
-      if (b.date !== date) return false
-      const startH = parseInt(b.start.split(':')[0])
-      const endMins = parseMins(b.end)
-      const slotStart = hour * 60
-      const slotEnd = (hour + 1) * 60
-      // block starts in this hour, OR started before and still ongoing
-      return parseMins(b.start) < slotEnd && endMins > slotStart
-    })
-
-  const getGEventsForSlot = (date: string, hour: number) =>
-    gEvents.filter(ev => getEventDate(ev) === date && getEventHour(ev) === hour)
 
   const dateLabel = view === 'week'
     ? `${weekDates[0].toLocaleDateString('en', { month: 'short', day: 'numeric' })} – ${weekDates[6].toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}`
     : refDate.toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+
+  // ── Render events for a day ───────────────────────────────────────────────
+  const getCat = (id: string) => categories.find(c => c.id === id) || categories[0]
+
+  const getRenderEvs = (dateStr: string): RenderEv[] => {
+    const evs: RenderEv[] = []
+
+    // Local blocks
+    blocks.filter(b => b.date === dateStr).forEach(b => {
+      const cat = getCat(b.categoryId)
+      evs.push({ id: b.id, title: b.title, startMins: toMins(b.start), endMins: toMins(b.end), color: cat.color, isGoogle: false })
+    })
+
+    // Google events
+    gEvents.forEach(ev => {
+      if (!ev.start.dateTime) return
+      const evDate = ev.start.dateTime.split('T')[0]
+      if (evDate !== dateStr) return
+      const start = new Date(ev.start.dateTime)
+      const end   = new Date(ev.end?.dateTime || ev.start.dateTime)
+      evs.push({ id: ev.id, title: ev.summary || '(No title)', startMins: start.getHours() * 60 + start.getMinutes(), endMins: end.getHours() * 60 + end.getMinutes(), color: GCAL_COLOR, isGoogle: true })
+    })
+
+    return evs
+  }
+
+  // ── Click on grid → open Google-style popup ────────────────────────────────
+  const handleDayClick = (e: React.MouseEvent<HTMLDivElement>, dateStr: string) => {
+    // Don't open if clicking an event
+    if ((e.target as HTMLElement).closest('[data-event]')) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const rawMins = Math.floor((e.clientY - rect.top + (scrollRef.current?.scrollTop || 0) - (scrollRef.current ? 0 : 0)) / PX_PER_MIN)
+    // Actually: the day column is inside the scrollable area, so clientY relative to column top
+    const colTop = e.currentTarget.getBoundingClientRect().top
+    const scrollTop = scrollRef.current?.scrollTop || 0
+    const clickedMins = Math.max(0, Math.min(23 * 60, Math.floor(((e.clientY - colTop + 0) ) / PX_PER_MIN / 15) * 15))
+    const start = minsToTime(clickedMins)
+    const end   = minsToTime(Math.min(23 * 60 + 59, clickedMins + 60))
+    setPopup({ clientX: e.clientX, clientY: e.clientY, date: dateStr, start, end, title: '' })
+    setSyncToGoogle(false)
+  }
+
+  // ── Save new block ────────────────────────────────────────────────────────
+  const saveBlock = async () => {
+    if (!popup || !popup.title.trim()) return
+    const b: Block = { id: Date.now().toString(), title: popup.title.trim(), categoryId: categories[1]?.id || 'focus', date: popup.date, start: popup.start, end: popup.end, notes: '' }
+    setBlocks(p => [...p, b])
+    if (syncToGoogle && session?.access_token) {
+      try {
+        await fetch('/api/calendar/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) })
+        await fetchGEvents(weekDates)
+      } catch { /* silent */ }
+    }
+    setPopup(null)
+  }
+
+  const deleteBlock = (id: string) => setBlocks(p => p.filter(b => b.id !== id))
+
+  const displayDays = view === 'week' ? weekDates : [refDate]
+  const gridCols = view === 'week' ? 7 : 1
+
+  // ── Popup position ────────────────────────────────────────────────────────
+  const popupW = 340, popupH = session ? 270 : 230
+  const popupLeft = popup ? Math.min(popup.clientX + 12, (typeof window !== 'undefined' ? window.innerWidth : 1200) - popupW - 16) : 0
+  const popupTop  = popup ? Math.min(popup.clientY - 16, (typeof window !== 'undefined' ? window.innerHeight : 800) - popupH - 16) : 0
 
   return (
     <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
       <div className="page-overlay">
         <div className="page-enter" style={{ maxWidth: '1400px', margin: '0 auto', padding: '1.5rem 1.5rem 3rem' }}>
 
-          {/* ── HEADER ── */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '1rem' }}>
+          {/* ── HEADER ─────────────────────────────────────────────────── */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.875rem' }}>
               <h1 style={{ fontFamily: 'var(--font-playfair)', fontSize: '1.875rem', fontWeight: '700', color: 'var(--color-text)', margin: 0 }}>Calendar</h1>
               <span style={{ fontSize: '0.8rem', color: 'var(--color-text-placeholder)' }}>{dateLabel}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              {/* Navigation */}
+              {/* Nav */}
               <div style={{ display: 'flex', alignItems: 'center', background: 'var(--color-card)', border: '1px solid var(--color-border-subtle)', borderRadius: '8px', overflow: 'hidden' }}>
-                <button onClick={goBack}    style={navBtn}>‹</button>
-                <button onClick={goToday}   style={{ ...navBtn, borderLeft: '1px solid var(--color-border-subtle)', borderRight: '1px solid var(--color-border-subtle)', padding: '0.375rem 0.875rem', fontSize: '0.65rem', letterSpacing: '0.06em' }}>Today</button>
-                <button onClick={goForward} style={navBtn}>›</button>
+                <button onClick={goBack}    style={btnNav}>‹</button>
+                <button onClick={goToday}   style={{ ...btnNav, borderLeft: '1px solid var(--color-border-subtle)', borderRight: '1px solid var(--color-border-subtle)', padding: '0.375rem 0.875rem', fontSize: '0.65rem', letterSpacing: '0.06em' }}>Today</button>
+                <button onClick={goForward} style={btnNav}>›</button>
               </div>
-              {/* View toggle */}
+              {/* View */}
               <div style={{ display: 'flex', background: 'var(--color-card)', border: '1px solid var(--color-border-subtle)', borderRadius: '8px', overflow: 'hidden' }}>
-                {(['week','day'] as const).map(v => (
-                  <button key={v} onClick={() => setView(v)} style={{
-                    padding: '0.375rem 0.875rem', border: 'none',
-                    background: view === v ? '#f2641918' : 'transparent',
-                    color: view === v ? '#f26419' : 'var(--color-text-placeholder)',
-                    fontSize: '0.65rem', cursor: 'pointer', textTransform: 'capitalize',
-                    letterSpacing: '0.06em', fontWeight: view === v ? '600' : '400',
-                    borderRight: v === 'week' ? '1px solid var(--color-border-subtle)' : 'none',
-                  }}>{v}</button>
+                {(['week','day'] as const).map((v, vi) => (
+                  <button key={v} onClick={() => setView(v)} style={{ padding: '0.375rem 0.875rem', border: 'none', borderRight: vi === 0 ? '1px solid var(--color-border-subtle)' : 'none', background: view === v ? '#f2641918' : 'transparent', color: view === v ? '#f26419' : 'var(--color-text-placeholder)', fontSize: '0.65rem', cursor: 'pointer', textTransform: 'capitalize', letterSpacing: '0.06em', fontWeight: view === v ? '600' : '400' }}>{v}</button>
                 ))}
               </div>
               {/* Google Calendar */}
-              {status === 'loading' ? <div style={{ width: '40px', height: '32px' }} /> : session ? (
+              {status === 'loading' ? null : session ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: `${GCAL_COLOR}12`, border: `1px solid ${GCAL_COLOR}30`, borderRadius: '8px', padding: '0.35rem 0.875rem' }}>
-                  {gLoading
-                    ? <span style={{ fontSize: '0.6rem', color: GCAL_COLOR }}>syncing…</span>
-                    : <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#34A853', display: 'inline-block' }} />
-                  }
+                  {gLoading ? <span style={{ fontSize: '0.6rem', color: GCAL_COLOR }}>syncing…</span> : <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#34A853', display: 'inline-block' }} />}
                   <span style={{ fontSize: '0.65rem', color: GCAL_COLOR, fontWeight: '500' }}>Google Calendar</span>
                   <button onClick={() => signOut({ redirect: false })} style={{ background: 'transparent', border: 'none', color: GCAL_COLOR, cursor: 'pointer', fontSize: '0.65rem', opacity: 0.5 }}>✕</button>
                 </div>
@@ -268,24 +293,22 @@ export default function Calendar() {
             </div>
           </div>
 
-          {/* ── CATEGORY CHIPS ── */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+          {/* ── CATEGORY CHIPS ──────────────────────────────────────────── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.875rem', flexWrap: 'wrap' }}>
             {categories.map(cat => (
-              <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: `${cat.color}18`, border: `1px solid ${cat.color}35`, borderRadius: '20px', padding: '0.2rem 0.5rem 0.2rem 0.45rem', cursor: 'default' }}>
+              <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: `${cat.color}18`, border: `1px solid ${cat.color}35`, borderRadius: '20px', padding: '0.18rem 0.5rem 0.18rem 0.4rem' }}>
                 <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: cat.color, flexShrink: 0 }} />
                 <span style={{ fontSize: '0.62rem', color: cat.color, fontWeight: '500' }}>{cat.name}</span>
-                {cat.custom && (
-                  <button onClick={() => setCategories(p => p.filter(c => c.id !== cat.id))} style={{ background: 'transparent', border: 'none', color: cat.color, cursor: 'pointer', fontSize: '0.7rem', padding: 0, lineHeight: 1, opacity: 0.5, marginLeft: '1px' }}>×</button>
-                )}
+                {cat.custom && <button onClick={() => setCategories(p => p.filter(c => c.id !== cat.id))} style={{ background: 'transparent', border: 'none', color: cat.color, cursor: 'pointer', fontSize: '0.7rem', padding: 0, lineHeight: 1, opacity: 0.5 }}>×</button>}
               </div>
             ))}
             {session && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: `${GCAL_COLOR}10`, border: `1px solid ${GCAL_COLOR}25`, borderRadius: '20px', padding: '0.2rem 0.5rem 0.2rem 0.45rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: `${GCAL_COLOR}10`, border: `1px solid ${GCAL_COLOR}25`, borderRadius: '20px', padding: '0.18rem 0.5rem 0.18rem 0.4rem' }}>
                 <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: GCAL_COLOR }} />
                 <span style={{ fontSize: '0.62rem', color: GCAL_COLOR, fontWeight: '500' }}>Google</span>
               </div>
             )}
-            <button onClick={() => setShowAddCat(!showAddCat)} style={{ background: 'transparent', border: '1px dashed var(--color-border)', color: 'var(--color-text-placeholder)', borderRadius: '20px', padding: '0.2rem 0.625rem', cursor: 'pointer', fontSize: '0.62rem' }}>+ Add</button>
+            <button onClick={() => setShowAddCat(!showAddCat)} style={{ background: 'transparent', border: '1px dashed var(--color-border)', color: 'var(--color-text-placeholder)', borderRadius: '20px', padding: '0.18rem 0.625rem', cursor: 'pointer', fontSize: '0.62rem' }}>+ Add</button>
           </div>
 
           {/* Add category */}
@@ -293,198 +316,169 @@ export default function Calendar() {
             <div className="card" style={{ padding: '0.875rem 1.125rem', marginBottom: '0.875rem', display: 'flex', gap: '0.625rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <input autoFocus placeholder="Category name" className="input-dark" style={{ flex: '1 1 160px', minWidth: 0 }} value={newCat.name}
                 onChange={e => setNewCat(p => ({ ...p, name: e.target.value }))}
-                onKeyDown={e => { if (e.key === 'Enter') { if (!newCat.name.trim()) return; setCategories(p => [...p, { id: Date.now().toString(), name: newCat.name.trim(), color: newCat.color, custom: true }]); setNewCat({ name: '', color: '#f26419' }); setShowAddCat(false) } }} />
+                onKeyDown={e => { if (e.key !== 'Enter' || !newCat.name.trim()) return; setCategories(p => [...p, { id: Date.now().toString(), name: newCat.name.trim(), color: newCat.color, custom: true }]); setNewCat({ name: '', color: '#f26419' }); setShowAddCat(false) }} />
               <div style={{ display: 'flex', gap: '0.3rem' }}>
                 {PALETTE.map(c => <button key={c} onClick={() => setNewCat(p => ({ ...p, color: c }))} style={{ width: '20px', height: '20px', borderRadius: '50%', background: c, border: newCat.color === c ? '2px solid var(--color-text)' : '2px solid transparent', cursor: 'pointer', flexShrink: 0 }} />)}
               </div>
-              <button onClick={() => { if (!newCat.name.trim()) return; setCategories(p => [...p, { id: Date.now().toString(), name: newCat.name.trim(), color: newCat.color, custom: true }]); setNewCat({ name: '', color: '#f26419' }); setShowAddCat(false) }} className="btn-primary" style={{ padding: '0.3rem 0.75rem' }}>Add</button>
-              <button onClick={() => setShowAddCat(false)} className="btn-ghost" style={{ padding: '0.3rem 0.625rem' }}>Cancel</button>
+              <button className="btn-primary" style={{ padding: '0.3rem 0.75rem' }} onClick={() => { if (!newCat.name.trim()) return; setCategories(p => [...p, { id: Date.now().toString(), name: newCat.name.trim(), color: newCat.color, custom: true }]); setNewCat({ name: '', color: '#f26419' }); setShowAddCat(false) }}>Add</button>
+              <button className="btn-ghost"   style={{ padding: '0.3rem 0.625rem' }} onClick={() => setShowAddCat(false)}>Cancel</button>
             </div>
           )}
 
-          {/* ── CALENDAR GRID ── */}
-          <div className="card" style={{ overflow: 'hidden', borderRadius: '10px', border: '1px solid var(--color-border-subtle)' }}>
+          {/* ── CALENDAR ────────────────────────────────────────────────── */}
+          <div className="card" style={{ overflow: 'hidden', borderRadius: '10px' }}>
 
             {/* Sticky day headers */}
-            <div style={{ display: 'grid', gridTemplateColumns: '52px repeat(7, 1fr)', background: 'var(--color-card)', borderBottom: '2px solid var(--color-border-subtle)', position: 'sticky', top: 0, zIndex: 10 }}>
-              <div style={{ borderRight: '1px solid var(--color-border-subtle)' }} />
-              {weekDates.map((d, i) => {
-                const isToday = fmt(d) === today
-                return (
-                  <div key={i} style={{ textAlign: 'center', padding: '0.75rem 0.25rem 0.625rem', borderRight: i < 6 ? '1px solid var(--color-border-subtle)' : 'none', background: isToday ? '#f2641907' : 'transparent' }}>
-                    <div style={{ fontSize: '0.56rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: isToday ? '#f26419' : 'var(--color-text-placeholder)', marginBottom: '0.35rem' }}>{WEEK_DAYS[i]}</div>
-                    <div style={{ width: '34px', height: '34px', borderRadius: '50%', margin: '0 auto', background: isToday ? '#f26419' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <span style={{ fontFamily: 'var(--font-playfair)', fontSize: '1.05rem', fontWeight: isToday ? '700' : '400', color: isToday ? '#fff' : 'var(--color-text-muted)' }}>{d.getDate()}</span>
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border-subtle)', background: 'var(--color-card)', position: 'sticky', top: 0, zIndex: 20 }}>
+              <div style={{ width: GUTTER_W, flexShrink: 0 }} />
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${gridCols}, 1fr)`, flex: 1 }}>
+                {displayDays.map((d, i) => {
+                  const isToday = fmt(d) === today
+                  return (
+                    <div key={i} style={{ textAlign: 'center', padding: '0.75rem 0.25rem 0.625rem', borderLeft: '1px solid var(--color-border-subtle)', background: isToday ? '#f2641907' : 'transparent' }}>
+                      <div style={{ fontSize: '0.57rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: isToday ? '#f26419' : 'var(--color-text-placeholder)', marginBottom: '0.35rem' }}>{WEEK_DAYS[(d.getDay() + 6) % 7]}</div>
+                      <div style={{ width: '34px', height: '34px', borderRadius: '50%', margin: '0 auto', background: isToday ? '#f26419' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ fontFamily: 'var(--font-playfair)', fontSize: '1.05rem', fontWeight: isToday ? '700' : '400', color: isToday ? '#fff' : 'var(--color-text-muted)' }}>{d.getDate()}</span>
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
 
-            {/* Scrollable time body */}
-            <div ref={scrollRef} style={{ height: '640px', overflowY: 'auto' }}>
-              {HOURS.map(hour => {
-                const isMajor = hour % 4 === 0
-                return (
-                  <div key={hour} style={{ display: 'grid', gridTemplateColumns: '52px repeat(7, 1fr)', minHeight: `${ROW_H}px`, borderBottom: `1px solid ${isMajor ? 'var(--color-border)' : 'var(--color-border-subtle)'}` }}>
-                    {/* Hour label */}
-                    <div style={{ padding: '0 6px 0 0', paddingTop: '5px', fontSize: '0.58rem', color: 'var(--color-text-placeholder)', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderRight: '1px solid var(--color-border-subtle)', fontWeight: isMajor ? '500' : '400' }}>
-                      {fmtHour(hour)}
-                    </div>
-                    {/* Day cells */}
-                    {weekDates.map((d, di) => {
-                      const dateStr = fmt(d)
-                      const isToday = dateStr === today
-                      const isCurrentHour = isToday && hour === currentHour
-                      const slotBlocks = getBlocksForSlot(dateStr, hour)
-                      const slotGEvents = getGEventsForSlot(dateStr, hour)
-                      const nowLineTop = (currentMins / 60) * ROW_H
+            {/* Scrollable body */}
+            <div ref={scrollRef} style={{ height: 620, overflowY: 'auto' }}>
+              <div style={{ display: 'flex', height: TOTAL_H, position: 'relative' }}>
 
-                      return (
-                        <div key={di}
-                          onClick={() => openModal(dateStr, hour)}
-                          style={{ position: 'relative', padding: '3px 3px 2px', borderRight: di < 6 ? '1px solid var(--color-border-subtle)' : 'none', background: isToday ? '#f2641905' : 'transparent', cursor: 'pointer', minHeight: `${ROW_H}px` }}
-                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = isToday ? '#f2641909' : '#00000006'}
-                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = isToday ? '#f2641905' : 'transparent'}
-                        >
-                          {/* Current time line */}
-                          {isCurrentHour && (
-                            <div style={{ position: 'absolute', left: 0, right: 0, top: `${nowLineTop}px`, height: '2px', background: '#f26419', zIndex: 5, pointerEvents: 'none' }}>
-                              <div style={{ position: 'absolute', left: '-5px', top: '-4px', width: '10px', height: '10px', borderRadius: '50%', background: '#f26419' }} />
-                            </div>
-                          )}
-
-                          {/* Local blocks */}
-                          {slotBlocks.map(b => {
-                            const cat = getCat(b.categoryId)
-                            const startMins = parseMins(b.start)
-                            const endMins = parseMins(b.end)
-                            const slotStartMins = hour * 60
-                            const slotEndMins = (hour + 1) * 60
-                            const visStart = Math.max(startMins, slotStartMins)
-                            const visEnd = Math.min(endMins, slotEndMins)
-                            const topPct = ((visStart - slotStartMins) / 60) * 100
-                            const heightPct = ((visEnd - visStart) / 60) * 100
-                            const isFirstSlot = startMins >= slotStartMins
-                            return (
-                              <div key={b.id}
-                                onClick={e => e.stopPropagation()}
-                                style={{
-                                  position: 'absolute',
-                                  top: `${topPct}%`,
-                                  height: `${Math.max(heightPct, 8)}%`,
-                                  left: '3px', right: '3px',
-                                  borderLeft: `3px solid ${cat.color}`,
-                                  background: `${cat.color}18`,
-                                  borderRadius: '0 4px 4px 0',
-                                  padding: '2px 5px 2px 4px',
-                                  overflow: 'hidden',
-                                  zIndex: 2,
-                                }}
-                              >
-                                {isFirstSlot && (
-                                  <>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                      <span style={{ fontSize: '0.67rem', color: cat.color, fontWeight: '600', lineHeight: 1.2, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', flex: 1 }}>{b.title}</span>
-                                      <button onClick={e => { e.stopPropagation(); setBlocks(p => p.filter(x => x.id !== b.id)) }} style={{ background: 'transparent', border: 'none', color: cat.color, cursor: 'pointer', fontSize: '0.7rem', padding: 0, lineHeight: 1, opacity: 0.45, flexShrink: 0, marginLeft: '2px' }}>×</button>
-                                    </div>
-                                    <div style={{ fontSize: '0.56rem', color: 'var(--color-text-placeholder)', marginTop: '1px', whiteSpace: 'nowrap' }}>{b.start}–{b.end}</div>
-                                  </>
-                                )}
-                              </div>
-                            )
-                          })}
-
-                          {/* Google events */}
-                          {slotGEvents.map(ev => (
-                            <div key={ev.id} onClick={e => e.stopPropagation()}
-                              style={{ position: 'absolute', top: '3px', left: '3px', right: '3px', borderLeft: `3px solid ${GCAL_COLOR}`, background: `${GCAL_COLOR}12`, borderRadius: '0 4px 4px 0', padding: '2px 5px 2px 4px', zIndex: 2 }}>
-                              <span style={{ fontSize: '0.67rem', color: GCAL_COLOR, fontWeight: '600', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', display: 'block' }}>{ev.summary}</span>
-                              {ev.start.dateTime && ev.end.dateTime && <div style={{ fontSize: '0.56rem', color: 'var(--color-text-placeholder)', marginTop: '1px' }}>{fmtEvTime(ev.start.dateTime)}–{fmtEvTime(ev.end.dateTime)}</div>}
-                            </div>
-                          ))}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* ── ADD BLOCK MODAL ── */}
-          {showModal && (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)' }} onClick={() => setShowModal(false)}>
-              <div className="card" style={{ padding: '1.75rem', width: '480px', maxWidth: '94vw', boxShadow: '0 24px 64px rgba(0,0,0,0.25)', borderRadius: '12px' }} onClick={e => e.stopPropagation()}>
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                    <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: getCat(newBlock.categoryId).color }} />
-                    <span style={{ fontFamily: 'var(--font-playfair)', fontSize: '1.1rem', fontWeight: '600', color: 'var(--color-text)' }}>New Block</span>
-                  </div>
-                  <button onClick={() => setShowModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--color-text-placeholder)', cursor: 'pointer', fontSize: '1.3rem', lineHeight: 1, padding: '0.15rem 0.25rem' }}>×</button>
-                </div>
-
-                <input autoFocus placeholder="What are you working on?" className="input-dark" style={{ marginBottom: '1rem', fontSize: '0.88rem', padding: '0.625rem 0.875rem' }}
-                  value={newBlock.title} onChange={e => setNewBlock(p => ({ ...p, title: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addBlock()} />
-
-                {/* Category */}
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ fontSize: '0.57rem', color: 'var(--color-text-placeholder)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Category</div>
-                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                    {categories.filter(c => !c.custom || true).map(cat => (
-                      <button key={cat.id} onClick={() => setNewBlock(p => ({ ...p, categoryId: cat.id }))} style={{
-                        padding: '0.3rem 0.75rem', borderRadius: '20px', border: '1px solid',
-                        borderColor: newBlock.categoryId === cat.id ? cat.color : 'var(--color-border-subtle)',
-                        background: newBlock.categoryId === cat.id ? `${cat.color}1a` : 'transparent',
-                        color: newBlock.categoryId === cat.id ? cat.color : 'var(--color-text-placeholder)',
-                        fontSize: '0.68rem', cursor: 'pointer', fontWeight: newBlock.categoryId === cat.id ? '600' : '400',
-                      }}>{cat.name}</button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Date + time row */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
-                  {[
-                    { label: 'Date',  type: 'date', val: newBlock.date,  key: 'date'  },
-                    { label: 'Start', type: 'time', val: newBlock.start, key: 'start' },
-                    { label: 'End',   type: 'time', val: newBlock.end,   key: 'end'   },
-                  ].map(f => (
-                    <div key={f.key}>
-                      <label style={{ fontSize: '0.57rem', color: 'var(--color-text-placeholder)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: '0.3rem' }}>{f.label}</label>
-                      <input type={f.type} className="input-dark" value={f.val} onChange={e => setNewBlock(p => ({ ...p, [f.key]: e.target.value }))} />
+                {/* Time gutter */}
+                <div style={{ width: GUTTER_W, flexShrink: 0, position: 'relative' }}>
+                  {HOURS.map(h => h > 0 && (
+                    <div key={h} style={{ position: 'absolute', top: h * 60 - 8, right: 8, fontSize: '0.58rem', color: 'var(--color-text-placeholder)', fontVariantNumeric: 'tabular-nums', lineHeight: 1, userSelect: 'none' }}>
+                      {fmtHour(h)}
                     </div>
                   ))}
                 </div>
 
-                <textarea placeholder="Notes (optional)…" className="input-dark" style={{ resize: 'vertical', minHeight: '60px', marginBottom: '0.875rem', fontSize: '0.8rem' }}
-                  value={newBlock.notes} onChange={e => setNewBlock(p => ({ ...p, notes: e.target.value }))} />
+                {/* Day columns */}
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${gridCols}, 1fr)`, flex: 1, position: 'relative' }}>
 
-                {session && (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '1rem', padding: '0.625rem 0.875rem', background: `${GCAL_COLOR}0c`, borderRadius: '8px', border: `1px solid ${GCAL_COLOR}20`, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={syncToGoogle} onChange={e => setSyncToGoogle(e.target.checked)} style={{ cursor: 'pointer', accentColor: GCAL_COLOR }} />
-                    <GoogleIcon />
-                    <span style={{ fontSize: '0.75rem', color: GCAL_COLOR }}>Also add to Google Calendar</span>
-                  </label>
-                )}
+                  {/* Hour lines (shared across all columns) */}
+                  {HOURS.map(h => (
+                    <div key={h} style={{ position: 'absolute', top: h * 60, left: 0, right: 0, borderTop: `1px solid ${h % 4 === 0 ? 'var(--color-border)' : 'var(--color-border-subtle)'}`, pointerEvents: 'none', zIndex: 0 }} />
+                  ))}
 
-                <div style={{ display: 'flex', gap: '0.625rem' }}>
-                  <button onClick={addBlock} className="btn-primary" style={{ flex: 1, padding: '0.625rem' }}>Create Block</button>
-                  <button onClick={() => setShowModal(false)} className="btn-ghost" style={{ padding: '0.625rem 1rem' }}>Cancel</button>
+                  {displayDays.map((d, di) => {
+                    const dateStr = fmt(d)
+                    const isToday = dateStr === today
+                    const rawEvs  = getRenderEvs(dateStr)
+                    const laidOut = computeLayout(rawEvs)
+
+                    return (
+                      <div key={di}
+                        style={{ position: 'relative', borderLeft: '1px solid var(--color-border-subtle)', background: isToday ? '#f2641904' : 'transparent', cursor: 'pointer' }}
+                        onClick={e => handleDayClick(e, dateStr)}
+                      >
+                        {/* Current time indicator */}
+                        {isToday && (
+                          <div style={{ position: 'absolute', left: 0, right: 0, top: nowMins * PX_PER_MIN, height: 2, background: '#EA4335', zIndex: 10, pointerEvents: 'none' }}>
+                            <div style={{ position: 'absolute', left: -5, top: -4, width: 10, height: 10, borderRadius: '50%', background: '#EA4335' }} />
+                          </div>
+                        )}
+
+                        {/* Events */}
+                        {laidOut.map(ev => {
+                          const topPx = ev.startMins * PX_PER_MIN
+                          const heightPx = Math.max(18, (ev.endMins - ev.startMins) * PX_PER_MIN)
+                          const pct   = 100 / ev.totalCols
+                          const leftPct  = ev.col * pct
+                          const widthPct = pct - 1 // 1% gap between side-by-side events
+                          const isShort = (ev.endMins - ev.startMins) <= 20
+
+                          return (
+                            <div key={ev.id} data-event="1"
+                              onClick={e => e.stopPropagation()}
+                              style={{ position: 'absolute', top: topPx + 1, height: heightPx - 2, left: `calc(${leftPct}% + 2px)`, width: `calc(${widthPct}% - 2px)`, background: ev.color, borderRadius: '4px', padding: isShort ? '2px 5px' : '3px 6px', overflow: 'hidden', zIndex: 5, cursor: 'default', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <span style={{ fontSize: '0.68rem', color: '#fff', fontWeight: '600', lineHeight: 1.25, overflow: 'hidden', whiteSpace: isShort ? 'nowrap' : 'normal', textOverflow: 'ellipsis', flex: 1 }}>
+                                  {ev.title}
+                                </span>
+                                {!ev.isGoogle && !isShort && (
+                                  <button data-event="1" onClick={e => { e.stopPropagation(); deleteBlock(ev.id) }} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '0.75rem', padding: 0, lineHeight: 1, flexShrink: 0, marginLeft: '2px' }}>×</button>
+                                )}
+                              </div>
+                              {!isShort && (
+                                <div style={{ fontSize: '0.57rem', color: 'rgba(255,255,255,0.85)', marginTop: '1px', whiteSpace: 'nowrap' }}>
+                                  {fmtTime12(ev.startMins)} – {fmtTime12(ev.endMins)}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
+
+      {/* ── GOOGLE-STYLE QUICK-ADD POPUP ────────────────────────────────── */}
+      {popup && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 90 }} onClick={() => setPopup(null)} />
+          <div style={{ position: 'fixed', left: popupLeft, top: popupTop, width: popupW, zIndex: 100, background: 'var(--color-card)', borderRadius: '12px', boxShadow: '0 8px 40px rgba(0,0,0,0.22)', overflow: 'hidden' }}>
+            {/* Drag bar */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0.875rem 0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.375rem' }}>
+                {(['Event','Task'] as const).map((t, ti) => (
+                  <button key={t} style={{ padding: '0.3rem 0.875rem', borderRadius: '20px', border: '1px solid', fontSize: '0.72rem', cursor: 'pointer', fontWeight: ti === 0 ? '600' : '400', borderColor: ti === 0 ? '#f2641955' : 'var(--color-border-subtle)', background: ti === 0 ? '#f2641912' : 'transparent', color: ti === 0 ? '#f26419' : 'var(--color-text-placeholder)' }}>{t}</button>
+                ))}
+              </div>
+              <button onClick={() => setPopup(null)} style={{ background: 'transparent', border: 'none', color: 'var(--color-text-placeholder)', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1 }}>×</button>
+            </div>
+
+            <div style={{ padding: '0 0.875rem 0.875rem' }}>
+              {/* Title input */}
+              <input autoFocus placeholder="Add title" value={popup.title} onChange={e => setPopup(p => p ? { ...p, title: e.target.value } : p)}
+                onKeyDown={e => e.key === 'Enter' && saveBlock()}
+                style={{ width: '100%', fontSize: '1rem', fontFamily: 'var(--font-playfair)', border: 'none', borderBottom: '2px solid #f26419', background: 'transparent', color: 'var(--color-text)', padding: '0.25rem 0', marginBottom: '0.875rem', outline: 'none', boxSizing: 'border-box' }} />
+
+              {/* Date + time */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.625rem', color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
+                <span>🗓</span>
+                <span style={{ fontWeight: '500' }}>{new Date(popup.date + 'T12:00:00').toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                <span>·</span>
+                <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                  <input type="time" value={popup.start} onChange={e => setPopup(p => p ? { ...p, start: e.target.value } : p)} style={{ border: 'none', background: 'transparent', color: 'var(--color-text-muted)', fontSize: '0.78rem', cursor: 'pointer', padding: 0, outline: 'none' }} />
+                  <span>–</span>
+                  <input type="time" value={popup.end}   onChange={e => setPopup(p => p ? { ...p, end:   e.target.value } : p)} style={{ border: 'none', background: 'transparent', color: 'var(--color-text-muted)', fontSize: '0.78rem', cursor: 'pointer', padding: 0, outline: 'none' }} />
+                </div>
+              </div>
+
+              {/* Google sync */}
+              {session && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', cursor: 'pointer', fontSize: '0.72rem', color: GCAL_COLOR }}>
+                  <input type="checkbox" checked={syncToGoogle} onChange={e => setSyncToGoogle(e.target.checked)} style={{ accentColor: GCAL_COLOR, cursor: 'pointer' }} />
+                  <GoogleIcon /> Also add to Google Calendar
+                </label>
+              )}
+
+              {/* Save */}
+              <button onClick={saveBlock} disabled={!popup.title.trim()} className="btn-primary" style={{ width: '100%', padding: '0.5rem', opacity: popup.title.trim() ? 1 : 0.5 }}>Save</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
 
-const navBtn: React.CSSProperties = {
+const btnNav: React.CSSProperties = {
   background: 'transparent', border: 'none', color: 'var(--color-text-muted)',
-  cursor: 'pointer', padding: '0.375rem 0.625rem', fontSize: '1.1rem', lineHeight: 1,
+  cursor: 'pointer', padding: '0.375rem 0.625rem', fontSize: '1.15rem', lineHeight: 1,
 }
 
 function GoogleIcon() {
