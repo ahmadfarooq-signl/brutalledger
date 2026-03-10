@@ -15,7 +15,7 @@ const DEFAULT_CATS: Category[] = [
   { id: 'personal', name: 'Personal', color: '#7a9fbc' },
 ]
 
-const HOURS = Array.from({ length: 19 }, (_, i) => i + 5) // 5 AM to 11 PM
+const HOURS = Array.from({ length: 24 }, (_, i) => i) // 12 AM to 11 PM
 const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const BG = 'https://images.unsplash.com/photo-1486325212027-8081e485255e?auto=format&fit=crop&w=2560&q=80'
@@ -200,7 +200,7 @@ export default function Calendar() {
               {HOURS.map(hour => (
                 <div key={hour} style={{ display: 'grid', gridTemplateColumns: '50px repeat(7, 1fr)', borderBottom: '1px solid var(--color-border-subtle)', minHeight: '44px' }}>
                   <div style={{ padding: '0.375rem 0.5rem 0', fontSize: '0.6rem', color: 'var(--color-text-placeholder)', textAlign: 'right' as const, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-                    {hour > 12 ? `${hour - 12}PM` : hour === 12 ? '12PM' : `${hour}AM`}
+                    {hour === 0 ? '12AM' : hour > 12 ? `${hour - 12}PM` : hour === 12 ? '12PM' : `${hour}AM`}
                   </div>
                   {weekDates.map((d, di) => {
                     const dateStr = fmt(d)
