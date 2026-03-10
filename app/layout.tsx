@@ -3,6 +3,7 @@ import './globals.css'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { SessionProvider } from 'next-auth/react'
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard' },
@@ -86,8 +87,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body data-theme={dark ? 'dark' : undefined}>
-        <Nav dark={dark} setDark={toggleDark} />
-        <main style={{ paddingTop: '52px', minHeight: '100vh' }}>{children}</main>
+        <SessionProvider>
+          <Nav dark={dark} setDark={toggleDark} />
+          <main style={{ paddingTop: '52px', minHeight: '100vh' }}>{children}</main>
+        </SessionProvider>
       </body>
     </html>
   )
