@@ -21,7 +21,6 @@ const HABITS = {
     { id: 'dms', label: '10 outreach DMs sent', auto: true },
     { id: 'comments', label: '10 LinkedIn comments done', auto: true },
     { id: 'post', label: 'LinkedIn post published today', auto: false },
-    { id: 'study', label: 'A-Level study 45 min minimum', auto: false },
   ],
   finance: [
     { id: 'savings', label: 'Monthly savings target hit', auto: false },
