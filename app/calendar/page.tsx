@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
+import { supabase } from '@/lib/supabase'
 
 type Category = { id: string; name: string; color: string; custom?: boolean }
 type Block    = { id: string; title: string; categoryId: string; date: string; start: string; end: string; notes: string }
@@ -73,7 +74,6 @@ function computeLayout(evs: RenderEv[]): LayoutEv[] {
   if (!evs.length) return []
   const sorted = [...evs].sort((a, b) => a.startMins - b.startMins || b.endMins - a.endMins)
 
-  // Find overlapping groups, then assign lanes within each group
   const result: LayoutEv[] = []
   let i = 0
 
@@ -87,8 +87,7 @@ function computeLayout(evs: RenderEv[]): LayoutEv[] {
       j++
     }
 
-    // Assign a column lane to each event in the group
-    const lanes: number[] = [] // lanes[k] = end time of last event placed in lane k
+    const lanes: number[] = []
     const assignments: Record<string, number> = {}
     group.forEach(ev => {
       let lane = lanes.findIndex(end => end <= ev.startMins)
@@ -115,19 +114,10 @@ export default function Calendar() {
   const { data: session, status } = useSession()
   const [view, setView]       = useState<'week' | 'day'>('week')
   const [refDate, setRefDate] = useState(new Date())
+  const [loading, setLoading] = useState(true)
 
-  const [categories, setCategories] = useState<Category[]>(() => {
-    try {
-      const stored: Category[] = JSON.parse(localStorage.getItem('bl-cal-categories') || 'null')
-      if (!stored) return DEFAULT_CATS
-      const ids = new Set(stored.map(c => c.id))
-      return [...DEFAULT_CATS.filter(d => !ids.has(d.id)), ...stored]
-    } catch { return DEFAULT_CATS }
-  })
-
-  const [blocks, setBlocks] = useState<Block[]>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-cal-blocks') || '[]') } catch { return [] }
-  })
+  const [categories, setCategories] = useState<Category[]>(DEFAULT_CATS)
+  const [blocks, setBlocks] = useState<Block[]>([])
 
   const [gEvents,  setGEvents]  = useState<GEvent[]>([])
   const [gLoading, setGLoading] = useState(false)
@@ -138,8 +128,44 @@ export default function Calendar() {
   const [syncToGoogle, setSyncToGoogle] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { localStorage.setItem('bl-cal-categories', JSON.stringify(categories)) }, [categories])
-  useEffect(() => { localStorage.setItem('bl-cal-blocks',     JSON.stringify(blocks))     }, [blocks])
+  // Load categories and blocks from Supabase
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const [{ data: catData }, { data: blockData }] = await Promise.all([
+        supabase.from('calendar_categories').select('*'),
+        supabase.from('calendar_blocks').select('*'),
+      ])
+
+      if (catData && catData.length > 0) {
+        const storedIds = new Set(catData.map((c: { id: string }) => c.id))
+        const merged = [
+          ...DEFAULT_CATS.filter(d => !storedIds.has(d.id)),
+          ...catData.map((c: { id: string; name: string; color: string; custom_cat: boolean }) => ({
+            id: c.id, name: c.name, color: c.color, custom: c.custom_cat,
+          })),
+        ]
+        setCategories(merged)
+      } else {
+        // Seed default categories
+        await supabase.from('calendar_categories').insert(DEFAULT_CATS.map(c => ({
+          id: c.id, name: c.name, color: c.color, custom_cat: false,
+        })))
+      }
+
+      setBlocks((blockData || []).map((b: {
+        id: string; title: string; category_id: string; date: string;
+        start_time: string; end_time: string; notes: string;
+      }) => ({
+        id: b.id, title: b.title, categoryId: b.category_id,
+        date: b.date, start: b.start_time, end: b.end_time, notes: b.notes,
+      })))
+
+      setLoading(false)
+    }
+    load()
+  }, [])
+
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t) }, [])
 
   // Auto-scroll to current time on mount
@@ -216,13 +242,8 @@ export default function Calendar() {
 
   // ── Click on grid → open Google-style popup ────────────────────────────────
   const handleDayClick = (e: React.MouseEvent<HTMLDivElement>, dateStr: string) => {
-    // Don't open if clicking an event
     if ((e.target as HTMLElement).closest('[data-event]')) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const rawMins = Math.floor((e.clientY - rect.top + (scrollRef.current?.scrollTop || 0) - (scrollRef.current ? 0 : 0)) / PX_PER_MIN)
-    // Actually: the day column is inside the scrollable area, so clientY relative to column top
     const colTop = e.currentTarget.getBoundingClientRect().top
-    const scrollTop = scrollRef.current?.scrollTop || 0
     const clickedMins = Math.max(0, Math.min(23 * 60, Math.floor(((e.clientY - colTop + 0) ) / PX_PER_MIN / 15) * 15))
     const start = minsToTime(clickedMins)
     const end   = minsToTime(Math.min(23 * 60 + 59, clickedMins + 60))
@@ -235,16 +256,39 @@ export default function Calendar() {
     if (!popup || !popup.title.trim()) return
     const b: Block = { id: Date.now().toString(), title: popup.title.trim(), categoryId: categories[1]?.id || 'focus', date: popup.date, start: popup.start, end: popup.end, notes: '' }
     setBlocks(p => [...p, b])
+    setPopup(null)
+
+    await supabase.from('calendar_blocks').insert({
+      id: b.id, title: b.title, category_id: b.categoryId,
+      date: b.date, start_time: b.start, end_time: b.end, notes: b.notes,
+    })
+
     if (syncToGoogle && session?.access_token) {
       try {
         await fetch('/api/calendar/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) })
         await fetchGEvents(weekDates)
       } catch { /* silent */ }
     }
-    setPopup(null)
   }
 
-  const deleteBlock = (id: string) => setBlocks(p => p.filter(b => b.id !== id))
+  const deleteBlock = async (id: string) => {
+    setBlocks(p => p.filter(b => b.id !== id))
+    await supabase.from('calendar_blocks').delete().eq('id', id)
+  }
+
+  const addCategory = async () => {
+    if (!newCat.name.trim()) return
+    const cat: Category = { id: Date.now().toString(), name: newCat.name.trim(), color: newCat.color, custom: true }
+    setCategories(p => [...p, cat])
+    setNewCat({ name: '', color: '#f26419' })
+    setShowAddCat(false)
+    await supabase.from('calendar_categories').insert({ id: cat.id, name: cat.name, color: cat.color, custom_cat: true })
+  }
+
+  const removeCategory = async (id: string) => {
+    setCategories(p => p.filter(c => c.id !== id))
+    await supabase.from('calendar_categories').delete().eq('id', id)
+  }
 
   const displayDays = view === 'week' ? weekDates : [refDate]
   const gridCols = view === 'week' ? 7 : 1
@@ -253,6 +297,16 @@ export default function Calendar() {
   const popupW = 340, popupH = session ? 270 : 230
   const popupLeft = popup ? Math.min(popup.clientX + 12, (typeof window !== 'undefined' ? window.innerWidth : 1200) - popupW - 16) : 0
   const popupTop  = popup ? Math.min(popup.clientY - 16, (typeof window !== 'undefined' ? window.innerHeight : 800) - popupH - 16) : 0
+
+  if (loading) {
+    return (
+      <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
+        <div className="page-overlay">
+          <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '1.5rem', color: 'var(--color-text-placeholder)', fontSize: '0.85rem' }}>Loading...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
@@ -299,7 +353,7 @@ export default function Calendar() {
               <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: `${cat.color}18`, border: `1px solid ${cat.color}35`, borderRadius: '20px', padding: '0.18rem 0.5rem 0.18rem 0.4rem' }}>
                 <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: cat.color, flexShrink: 0 }} />
                 <span style={{ fontSize: '0.62rem', color: cat.color, fontWeight: '500' }}>{cat.name}</span>
-                {cat.custom && <button onClick={() => setCategories(p => p.filter(c => c.id !== cat.id))} style={{ background: 'transparent', border: 'none', color: cat.color, cursor: 'pointer', fontSize: '0.7rem', padding: 0, lineHeight: 1, opacity: 0.5 }}>×</button>}
+                {cat.custom && <button onClick={() => removeCategory(cat.id)} style={{ background: 'transparent', border: 'none', color: cat.color, cursor: 'pointer', fontSize: '0.7rem', padding: 0, lineHeight: 1, opacity: 0.5 }}>×</button>}
               </div>
             ))}
             {session && (
@@ -316,11 +370,11 @@ export default function Calendar() {
             <div className="card" style={{ padding: '0.875rem 1.125rem', marginBottom: '0.875rem', display: 'flex', gap: '0.625rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <input autoFocus placeholder="Category name" className="input-dark" style={{ flex: '1 1 160px', minWidth: 0 }} value={newCat.name}
                 onChange={e => setNewCat(p => ({ ...p, name: e.target.value }))}
-                onKeyDown={e => { if (e.key !== 'Enter' || !newCat.name.trim()) return; setCategories(p => [...p, { id: Date.now().toString(), name: newCat.name.trim(), color: newCat.color, custom: true }]); setNewCat({ name: '', color: '#f26419' }); setShowAddCat(false) }} />
+                onKeyDown={e => { if (e.key !== 'Enter' || !newCat.name.trim()) return; addCategory() }} />
               <div style={{ display: 'flex', gap: '0.3rem' }}>
                 {PALETTE.map(c => <button key={c} onClick={() => setNewCat(p => ({ ...p, color: c }))} style={{ width: '20px', height: '20px', borderRadius: '50%', background: c, border: newCat.color === c ? '2px solid var(--color-text)' : '2px solid transparent', cursor: 'pointer', flexShrink: 0 }} />)}
               </div>
-              <button className="btn-primary" style={{ padding: '0.3rem 0.75rem' }} onClick={() => { if (!newCat.name.trim()) return; setCategories(p => [...p, { id: Date.now().toString(), name: newCat.name.trim(), color: newCat.color, custom: true }]); setNewCat({ name: '', color: '#f26419' }); setShowAddCat(false) }}>Add</button>
+              <button className="btn-primary" style={{ padding: '0.3rem 0.75rem' }} onClick={addCategory}>Add</button>
               <button className="btn-ghost"   style={{ padding: '0.3rem 0.625rem' }} onClick={() => setShowAddCat(false)}>Cancel</button>
             </div>
           )}
@@ -391,7 +445,7 @@ export default function Calendar() {
                           const heightPx = Math.max(18, (ev.endMins - ev.startMins) * PX_PER_MIN)
                           const pct   = 100 / ev.totalCols
                           const leftPct  = ev.col * pct
-                          const widthPct = pct - 1 // 1% gap between side-by-side events
+                          const widthPct = pct - 1
                           const isShort = (ev.endMins - ev.startMins) <= 20
 
                           return (

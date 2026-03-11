@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { fmtDateWithDay } from '@/lib/dateUtils'
+import { supabase } from '@/lib/supabase'
 
 type Status = 'warming' | 'dm_sent' | 'replied' | 'call_booked' | 'proposal_sent' | 'closed_won' | 'closed_lost'
 
@@ -24,25 +25,48 @@ const STATUS_COLORS: Record<Status, string> = {
 const STATUSES = Object.keys(STATUS_LABELS) as Status[]
 const BG = 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=2560&q=80'
 
+const TODAY = new Date().toISOString().split('T')[0]
+
 export default function Outreach() {
-  const [dms, setDms] = useState<number>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-outreach-dms') || '0') } catch { return 0 }
-  })
-  const [comments, setComments] = useState<number>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-outreach-comments') || '0') } catch { return 0 }
-  })
+  const [dms, setDms] = useState<number>(0)
+  const [comments, setComments] = useState<number>(0)
   const [filter, setFilter] = useState<Status | 'all'>('all')
-  const [prospects, setProspects] = useState<Prospect[]>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-outreach-prospects') || '[]') } catch { return [] }
-  })
+  const [prospects, setProspects] = useState<Prospect[]>([])
+  const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [newP, setNewP] = useState({ name: '', url: '', followers: '', niche: '', notes: '' })
 
-  useEffect(() => { localStorage.setItem('bl-outreach-prospects', JSON.stringify(prospects)) }, [prospects])
-  useEffect(() => { localStorage.setItem('bl-outreach-dms', JSON.stringify(dms)) }, [dms])
-  useEffect(() => { localStorage.setItem('bl-outreach-comments', JSON.stringify(comments)) }, [comments])
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const [{ data: prospectData }, { data: dailyData }] = await Promise.all([
+        supabase.from('outreach_prospects').select('*').order('date_added', { ascending: false }),
+        supabase.from('outreach_daily').select('*').eq('date', TODAY),
+      ])
 
-  const addProspect = () => {
+      setProspects((prospectData || []).map((p: {
+        id: string; name: string; url: string; followers: string; niche: string;
+        status: Status; notes: string; date_added: string; comment_count: number;
+      }) => ({
+        id: p.id, name: p.name, url: p.url, followers: p.followers, niche: p.niche,
+        status: p.status, notes: p.notes, dateAdded: p.date_added, commentCount: p.comment_count,
+      })))
+
+      if (dailyData && dailyData.length > 0) {
+        setDms(dailyData[0].dms)
+        setComments(dailyData[0].comments)
+      }
+
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const upsertDaily = async (newDms: number, newComments: number) => {
+    await supabase.from('outreach_daily').upsert({ date: TODAY, dms: newDms, comments: newComments }, { onConflict: 'date' })
+  }
+
+  const addProspect = async () => {
     if (!newP.name) return
     const p: Prospect = {
       ...newP,
@@ -54,29 +78,65 @@ export default function Outreach() {
     setProspects(prev => [p, ...prev])
     setNewP({ name: '', url: '', followers: '', niche: '', notes: '' })
     setShowAdd(false)
+    await supabase.from('outreach_prospects').insert({
+      id: p.id, name: p.name, url: p.url, followers: p.followers, niche: p.niche,
+      status: p.status, notes: p.notes, date_added: p.dateAdded, comment_count: 0,
+    })
   }
 
-  const updateStatus = (id: string, status: Status) => {
+  const updateStatus = async (id: string, status: Status) => {
+    let newDms = dms
     setProspects(prev => prev.map(p => {
       if (p.id !== id) return p
-      if (status === 'dm_sent' && p.status === 'warming') setDms(d => d + 1)
+      if (status === 'dm_sent' && p.status === 'warming') {
+        newDms = dms + 1
+        setDms(newDms)
+        upsertDaily(newDms, comments)
+      }
       return { ...p, status }
     }))
+    await supabase.from('outreach_prospects').update({ status }).eq('id', id)
   }
 
-  const deleteProspect = (id: string) => {
+  const deleteProspect = async (id: string) => {
     setProspects(prev => prev.filter(p => p.id !== id))
+    await supabase.from('outreach_prospects').delete().eq('id', id)
   }
 
-  const logComment = (id: string) => {
+  const logComment = async (id: string) => {
+    let newComments = comments
     setProspects(prev => prev.map(p =>
       p.id === id ? { ...p, commentCount: p.commentCount + 1 } : p
     ))
-    setComments(c => c + 1)
+    newComments = comments + 1
+    setComments(newComments)
+    upsertDaily(dms, newComments)
+    await supabase.from('outreach_prospects').update({ comment_count: (prospects.find(p => p.id === id)?.commentCount || 0) + 1 }).eq('id', id)
+  }
+
+  const adjustDms = async (delta: number) => {
+    const newVal = Math.max(0, dms + delta)
+    setDms(newVal)
+    await upsertDaily(newVal, comments)
+  }
+
+  const adjustComments = async (delta: number) => {
+    const newVal = Math.max(0, comments + delta)
+    setComments(newVal)
+    await upsertDaily(dms, newVal)
   }
 
   const filtered = filter === 'all' ? prospects : prospects.filter(p => p.status === filter)
-  const warmingCount = prospects.filter(p => p.status === 'warming').length
+
+  if (loading) {
+    return (
+      <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
+        <div className="page-overlay">
+          <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '2.5rem 2rem', color: 'var(--color-text-placeholder)', fontSize: '0.85rem' }}>Loading...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
@@ -93,8 +153,8 @@ export default function Outreach() {
           {/* Daily counters */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
             {[
-              { label: 'DMs Sent Today', value: dms, target: 10 },
-              { label: 'Comments Today', value: comments, target: 10 },
+              { label: 'DMs Sent Today', value: dms, target: 10, adjust: adjustDms },
+              { label: 'Comments Today', value: comments, target: 10, adjust: adjustComments },
             ].map((c, i) => (
               <div key={i} className="card" style={{ padding: '1.25rem 1.5rem' }}>
                 <div style={{ fontSize: '0.6rem', color: 'var(--color-text-placeholder)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>{c.label}</div>
@@ -104,9 +164,9 @@ export default function Outreach() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button onClick={() => i === 0 ? setDms(d => Math.max(0, d - 1)) : setComments(d => Math.max(0, d - 1))}
+                  <button onClick={() => c.adjust(-1)}
                     style={{ flex: 1, padding: '0.375rem', border: '1px solid var(--color-border-subtle)', background: 'transparent', color: 'var(--color-text-dim)', borderRadius: '5px', cursor: 'pointer', fontSize: '1rem' }}>−</button>
-                  <button onClick={() => i === 0 ? setDms(d => d + 1) : setComments(d => d + 1)}
+                  <button onClick={() => c.adjust(1)}
                     style={{ flex: 1, padding: '0.375rem', border: '1px solid #f2641944', background: '#f2641911', color: '#f26419', borderRadius: '5px', cursor: 'pointer', fontSize: '1rem' }}>+</button>
                 </div>
               </div>

@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 
 type SleepEntry = { start: string; end: string; label: string }
 type DayRecord = { entries: SleepEntry[] }
@@ -134,10 +135,8 @@ export default function Sleep() {
   const today = fmt(new Date())
   const now = new Date()
 
-  // All sleep data per day
-  const [allData, setAllData] = useState<Record<string, DayRecord>>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-sleep-data') || '{}') } catch { return {} }
-  })
+  const [allData, setAllData] = useState<Record<string, DayRecord>>({})
+  const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'today' | 'week' | 'month'>('today')
   const [monthRef, setMonthRef] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [showAddNap, setShowAddNap] = useState(false)
@@ -145,24 +144,56 @@ export default function Sleep() {
   const [mainSleep, setMainSleep] = useState({ start: '22:00', end: '06:00' })
   const [mainLogged, setMainLogged] = useState(false)
 
-  useEffect(() => { localStorage.setItem('bl-sleep-data', JSON.stringify(allData)) }, [allData])
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const { data } = await supabase.from('sleep_entries').select('*').order('date')
+      const map: Record<string, DayRecord> = {}
+      for (const row of (data || [])) {
+        if (!map[row.date]) map[row.date] = { entries: [] }
+        map[row.date].entries.push({ start: row.start_time, end: row.end_time, label: row.label })
+      }
+      setAllData(map)
+      // Check if today has a main sleep entry
+      if (map[today]) {
+        const mainEntry = map[today].entries.find(e => e.label === 'Main Sleep')
+        if (mainEntry) {
+          setMainSleep({ start: mainEntry.start, end: mainEntry.end })
+          setMainLogged(true)
+        }
+      }
+      setLoading(false)
+    }
+    load()
+  }, [])
 
   const todayEntries = allData[today]?.entries || []
   const total = todayEntries.reduce((sum, e) => sum + calcHours(e.start, e.end), 0)
   const alerts = getSleepAlerts(todayEntries)
 
-  const logMainSleep = () => {
+  const logMainSleep = async () => {
     if (!mainSleep.start || !mainSleep.end) return
     const entry: SleepEntry = { start: mainSleep.start, end: mainSleep.end, label: 'Main Sleep' }
+
+    // Remove old main sleep entry from DB
+    const existing = allData[today]?.entries || []
+    const oldMain = existing.find(e => e.label === 'Main Sleep')
+    if (oldMain) {
+      await supabase.from('sleep_entries').delete().eq('date', today).eq('label', 'Main Sleep')
+    }
+
     setAllData(prev => {
-      const existing = prev[today]?.entries || []
-      const filtered = existing.filter(e => e.label === 'Main Sleep' ? false : true)
+      const existingEntries = prev[today]?.entries || []
+      const filtered = existingEntries.filter(e => e.label !== 'Main Sleep')
       return { ...prev, [today]: { entries: [entry, ...filtered] } }
     })
     setMainLogged(true)
+
+    const id = `${today}_main`
+    await supabase.from('sleep_entries').upsert({ id, date: today, start_time: mainSleep.start, end_time: mainSleep.end, label: 'Main Sleep' }, { onConflict: 'id' })
   }
 
-  const addNap = () => {
+  const addNap = async () => {
     if (!newNap.start || !newNap.end) return
     const napNum = todayEntries.filter(e => e.label !== 'Main Sleep').length + 1
     const entry: SleepEntry = { start: newNap.start, end: newNap.end, label: `Nap ${napNum}` }
@@ -172,14 +203,18 @@ export default function Sleep() {
     }))
     setNewNap({ start: '13:00', end: '14:00' })
     setShowAddNap(false)
+
+    const id = `${today}_nap_${Date.now()}`
+    await supabase.from('sleep_entries').insert({ id, date: today, start_time: entry.start, end_time: entry.end, label: entry.label })
   }
 
-  const removeEntry = (label: string) => {
+  const removeEntry = async (label: string) => {
     setAllData(prev => ({
       ...prev,
       [today]: { entries: (prev[today]?.entries || []).filter(e => e.label !== label) }
     }))
     if (label === 'Main Sleep') setMainLogged(false)
+    await supabase.from('sleep_entries').delete().eq('date', today).eq('label', label)
   }
 
   const getDayTotal = (dateStr: string) => {
@@ -194,6 +229,16 @@ export default function Sleep() {
   const nextMonth = () => setMonthRef(p => ({ year: p.month === 11 ? p.year + 1 : p.year, month: p.month === 11 ? 0 : p.month + 1 }))
 
   const sleepColor = (h: number) => h === 0 ? 'var(--color-border)' : h < 6 ? '#8b3a3a' : h < 7 ? '#8a7340' : '#4a7c59'
+
+  if (loading) {
+    return (
+      <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
+        <div className="page-overlay">
+          <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2.5rem 2rem', color: 'var(--color-text-placeholder)', fontSize: '0.85rem' }}>Loading...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>

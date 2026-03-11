@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 
 type Habit = { id: string; label: string; auto: boolean; custom?: boolean }
 type HabitsMap = Record<string, Habit[]>
@@ -63,9 +64,41 @@ export default function Habits() {
   const today = fmt(new Date())
   const now = new Date()
 
-  const [customHabits, setCustomHabits] = useState<HabitsMap>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-habits-custom') || '{}') } catch { return {} }
-  })
+  const [customHabits, setCustomHabits] = useState<HabitsMap>({})
+  const [records, setRecords] = useState<Record<string, Record<string, boolean>>>({})
+  const [loading, setLoading] = useState(true)
+  const [view, setView] = useState<'today' | 'week' | 'month'>('today')
+  const [monthRef, setMonthRef] = useState({ year: now.getFullYear(), month: now.getMonth() })
+  const [addingTo, setAddingTo] = useState<string | null>(null)
+  const [newLabel, setNewLabel] = useState('')
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const [{ data: customData }, { data: recordData }] = await Promise.all([
+        supabase.from('habits_custom').select('*'),
+        supabase.from('habit_records').select('*'),
+      ])
+
+      // Rebuild customHabits map
+      const customMap: HabitsMap = {}
+      for (const row of (customData || [])) {
+        if (!customMap[row.category]) customMap[row.category] = []
+        customMap[row.category].push({ id: row.id, label: row.label, auto: row.auto, custom: row.custom_habit })
+      }
+      setCustomHabits(customMap)
+
+      // Rebuild records map
+      const recMap: Record<string, Record<string, boolean>> = {}
+      for (const row of (recordData || [])) {
+        if (!recMap[row.date]) recMap[row.date] = {}
+        recMap[row.date][row.habit_id] = row.completed
+      }
+      setRecords(recMap)
+      setLoading(false)
+    }
+    load()
+  }, [])
 
   // Merge default + custom habits per category
   const habitsMap: HabitsMap = Object.fromEntries(
@@ -76,26 +109,17 @@ export default function Habits() {
   )
   const allHabits = Object.values(habitsMap).flat()
 
-  const [records, setRecords] = useState<Record<string, Record<string, boolean>>>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-habits-records') || '{}') } catch { return {} }
-  })
-  const [view, setView] = useState<'today' | 'week' | 'month'>('today')
-  const [monthRef, setMonthRef] = useState({ year: now.getFullYear(), month: now.getMonth() })
-  const [addingTo, setAddingTo] = useState<string | null>(null)
-  const [newLabel, setNewLabel] = useState('')
-
-  useEffect(() => { localStorage.setItem('bl-habits-records', JSON.stringify(records)) }, [records])
-  useEffect(() => { localStorage.setItem('bl-habits-custom', JSON.stringify(customHabits)) }, [customHabits])
-
   const todayRec = records[today] || {}
-  const toggle = (id: string, val: boolean) => {
+
+  const toggle = async (id: string, val: boolean) => {
     setRecords(prev => ({
       ...prev,
       [today]: { ...(prev[today] || {}), [id]: val }
     }))
+    await supabase.from('habit_records').upsert({ date: today, habit_id: id, completed: val }, { onConflict: 'date,habit_id' })
   }
 
-  const addHabit = (cat: string) => {
+  const addHabit = async (cat: string) => {
     const label = newLabel.trim()
     if (!label) return
     const id = `custom_${cat}_${Date.now()}`
@@ -105,9 +129,10 @@ export default function Habits() {
     }))
     setNewLabel('')
     setAddingTo(null)
+    await supabase.from('habits_custom').insert({ id, label, category: cat, auto: false, custom_habit: true })
   }
 
-  const deleteHabit = (cat: string, id: string) => {
+  const deleteHabit = async (cat: string, id: string) => {
     setCustomHabits(prev => ({
       ...prev,
       [cat]: (prev[cat] || []).filter(h => h.id !== id)
@@ -121,6 +146,8 @@ export default function Habits() {
       }
       return updated
     })
+    await supabase.from('habits_custom').delete().eq('id', id)
+    await supabase.from('habit_records').delete().eq('habit_id', id)
   }
 
   const done = allHabits.filter(h => todayRec[h.id]).length
@@ -150,6 +177,16 @@ export default function Habits() {
       const y = p.month === 11 ? p.year + 1 : p.year
       return { year: y, month: m }
     })
+  }
+
+  if (loading) {
+    return (
+      <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
+        <div className="page-overlay">
+          <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2.5rem 2rem', color: 'var(--color-text-placeholder)', fontSize: '0.85rem' }}>Loading...</div>
+        </div>
+      </div>
+    )
   }
 
   return (

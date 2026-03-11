@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { fmtDateWithDay } from '@/lib/dateUtils'
+import { supabase } from '@/lib/supabase'
 
 type Pillar = 'contrarian' | 'story' | 'tactical' | 'personal'
 type Post = { id: string; date: string; topic: string; pillar: Pillar; format: string; d7: number; d30: number; comments: number; cta: string }
@@ -12,22 +13,35 @@ const BG = 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=fo
 
 export default function Content() {
   const [tab, setTab] = useState<'log' | 'kb'>('log')
-  const [posts, setPosts] = useState<Post[]>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-content-posts') || '[]') } catch { return [] }
-  })
-  const [kbEntries, setKbEntries] = useState<KBEntry[]>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-content-kb') || '[]') } catch { return [] }
-  })
+  const [posts, setPosts] = useState<Post[]>([])
+  const [kbEntries, setKbEntries] = useState<KBEntry[]>([])
+  const [loading, setLoading] = useState(true)
   const [showAddPost, setShowAddPost] = useState(false)
   const [showAddKB, setShowAddKB] = useState(false)
   const [newPost, setNewPost] = useState({ date: new Date().toISOString().split('T')[0], topic: '', pillar: 'contrarian' as Pillar, format: 'text', d7: '', d30: '', comments: '', cta: '' })
   const [newKB, setNewKB] = useState({ category: KB_CATEGORIES[0], title: '', body: '' })
   const [kbFilter, setKbFilter] = useState('all')
 
-  useEffect(() => { localStorage.setItem('bl-content-posts', JSON.stringify(posts)) }, [posts])
-  useEffect(() => { localStorage.setItem('bl-content-kb', JSON.stringify(kbEntries)) }, [kbEntries])
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const [{ data: postData }, { data: kbData }] = await Promise.all([
+        supabase.from('content_posts').select('*').order('date', { ascending: false }),
+        supabase.from('content_kb').select('*').order('date', { ascending: false }),
+      ])
+      setPosts((postData || []).map((p: {
+        id: string; date: string; topic: string; pillar: Pillar; format: string;
+        d7: number; d30: number; comments: number; cta: string;
+      }) => ({ id: p.id, date: p.date, topic: p.topic, pillar: p.pillar, format: p.format, d7: p.d7, d30: p.d30, comments: p.comments, cta: p.cta })))
+      setKbEntries((kbData || []).map((e: {
+        id: string; category: string; title: string; body: string; date: string; source: 'manual' | 'post_log';
+      }) => ({ id: e.id, category: e.category, title: e.title, body: e.body, date: e.date, source: e.source })))
+      setLoading(false)
+    }
+    load()
+  }, [])
 
-  const addPost = () => {
+  const addPost = async () => {
     if (!newPost.topic) return
     const post: Post = { ...newPost, id: Date.now().toString(), d7: Number(newPost.d7), d30: Number(newPost.d30), comments: Number(newPost.comments) }
     setPosts(p => [post, ...p])
@@ -54,21 +68,40 @@ export default function Content() {
     setKbEntries(p => [kbEntry, ...p])
     setNewPost({ date: new Date().toISOString().split('T')[0], topic: '', pillar: 'contrarian', format: 'text', d7: '', d30: '', comments: '', cta: '' })
     setShowAddPost(false)
+
+    await supabase.from('content_posts').insert({
+      id: post.id, date: post.date, topic: post.topic, pillar: post.pillar,
+      format: post.format, d7: post.d7, d30: post.d30, comments: post.comments, cta: post.cta,
+    })
+    await supabase.from('content_kb').insert({
+      id: kbEntry.id, category: kbEntry.category, title: kbEntry.title,
+      body: kbEntry.body, date: kbEntry.date, source: kbEntry.source,
+    })
   }
 
-  const addKB = () => {
+  const addKB = async () => {
     if (!newKB.title) return
-    setKbEntries(p => [{ ...newKB, id: Date.now().toString(), date: new Date().toLocaleDateString(), source: 'manual' }, ...p])
+    const entry: KBEntry = { ...newKB, id: Date.now().toString(), date: new Date().toLocaleDateString(), source: 'manual' }
+    setKbEntries(p => [entry, ...p])
     setNewKB({ category: KB_CATEGORIES[0], title: '', body: '' })
     setShowAddKB(false)
+    await supabase.from('content_kb').insert({
+      id: entry.id, category: entry.category, title: entry.title,
+      body: entry.body, date: entry.date, source: entry.source,
+    })
   }
 
-  const deletePost = (id: string) => {
+  const deletePost = async (id: string) => {
     setPosts(p => p.filter(post => post.id !== id))
     setKbEntries(p => p.filter(e => e.id !== `post_${id}`))
+    await supabase.from('content_posts').delete().eq('id', id)
+    await supabase.from('content_kb').delete().eq('id', `post_${id}`)
   }
 
-  const deleteKBEntry = (id: string) => setKbEntries(p => p.filter(e => e.id !== id))
+  const deleteKBEntry = async (id: string) => {
+    setKbEntries(p => p.filter(e => e.id !== id))
+    await supabase.from('content_kb').delete().eq('id', id)
+  }
 
   const avgD7 = posts.length ? Math.round(posts.reduce((s, p) => s + p.d7, 0) / posts.length) : 0
   const avgD30 = posts.length ? Math.round(posts.reduce((s, p) => s + p.d30, 0) / posts.length) : 0
@@ -85,6 +118,16 @@ export default function Content() {
 
   const kbCategories = ['all', ...Array.from(new Set(kbEntries.map(e => e.category)))]
   const filteredKB = kbFilter === 'all' ? kbEntries : kbEntries.filter(e => e.category === kbFilter)
+
+  if (loading) {
+    return (
+      <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
+        <div className="page-overlay">
+          <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2.5rem 2rem', color: 'var(--color-text-placeholder)', fontSize: '0.85rem' }}>Loading...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>

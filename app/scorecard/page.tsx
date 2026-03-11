@@ -1,10 +1,11 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 
 const BG = 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=2560&q=80'
 
 type PastWeek = {
-  range: string; dms: number; posts: number; sleep: string;
+  id: string; range: string; dms: number; posts: number; sleep: string;
   cmts: number; savings: string; pct: number
 }
 type Metric = { label: string; value: number; target: number; unit: string }
@@ -22,34 +23,72 @@ const DEFAULT_METRICS: Metric[] = [
 
 export default function Scorecard() {
   const [period, setPeriod] = useState<'week' | 'month'>('week')
-  const [avoided, setAvoided] = useState(() => {
-    try { return localStorage.getItem('bl-scorecard-avoided') || '' } catch { return '' }
-  })
+  const [avoided, setAvoided] = useState('')
   const [saved, setSaved] = useState(false)
-  const [pastWeeks, setPastWeeks] = useState<PastWeek[]>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-scorecard-pastweeks') || '[]') } catch { return [] }
-  })
+  const [pastWeeks, setPastWeeks] = useState<PastWeek[]>([])
+  const [metrics, setMetrics] = useState<Metric[]>(DEFAULT_METRICS)
+  const [loading, setLoading] = useState(true)
   const [showLogWeek, setShowLogWeek] = useState(false)
   const [newWeek, setNewWeek] = useState({ range: '', dms: '', posts: '', sleep: '', cmts: '', savings: '', pct: '' })
 
-  // Current week metrics (user fills in manually)
-  const [metrics, setMetrics] = useState<Metric[]>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-scorecard-metrics') || 'null') || DEFAULT_METRICS } catch { return DEFAULT_METRICS }
-  })
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const [{ data: weekData }, { data: metricData }, { data: settData }] = await Promise.all([
+        supabase.from('scorecard_weeks').select('*').order('rowid' as never, { ascending: false }),
+        supabase.from('scorecard_metrics').select('*'),
+        supabase.from('scorecard_settings').select('*'),
+      ])
 
-  useEffect(() => { localStorage.setItem('bl-scorecard-pastweeks', JSON.stringify(pastWeeks)) }, [pastWeeks])
-  useEffect(() => { localStorage.setItem('bl-scorecard-metrics', JSON.stringify(metrics)) }, [metrics])
-  useEffect(() => { localStorage.setItem('bl-scorecard-avoided', avoided) }, [avoided])
+      setPastWeeks((weekData || []).map((w: {
+        id: string; range: string; dms: number; posts: number; sleep: string;
+        cmts: number; savings: string; pct: number;
+      }) => ({ id: w.id, range: w.range, dms: w.dms, posts: w.posts, sleep: w.sleep, cmts: w.cmts, savings: w.savings, pct: w.pct })))
 
-  const updateMetric = (i: number, val: string) => {
-    setMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, value: Number(val) || 0 } : m))
+      if (metricData && metricData.length > 0) {
+        // Merge loaded metrics with defaults (in case new ones were added)
+        const loadedMap: Record<string, Metric> = {}
+        for (const m of metricData) {
+          loadedMap[m.label] = { label: m.label, value: m.value, target: m.target, unit: m.unit }
+        }
+        setMetrics(DEFAULT_METRICS.map(dm => loadedMap[dm.label] ? { ...dm, value: loadedMap[dm.label].value } : dm))
+      } else {
+        // Seed default metrics
+        await supabase.from('scorecard_metrics').insert(DEFAULT_METRICS.map(m => ({
+          label: m.label, value: m.value, target: m.target, unit: m.unit,
+        })))
+      }
+
+      const avoidedRow = (settData || []).find((r: { key: string; value: string }) => r.key === 'avoided')
+      if (avoidedRow) setAvoided(avoidedRow.value)
+
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const updateMetric = async (i: number, val: string) => {
+    const numVal = Number(val) || 0
+    setMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, value: numVal } : m))
+    const metric = metrics[i]
+    await supabase.from('scorecard_metrics').upsert({ label: metric.label, value: numVal, target: metric.target, unit: metric.unit }, { onConflict: 'label' })
   }
 
-  const deletePastWeek = (idx: number) => setPastWeeks(p => p.filter((_, i) => i !== idx))
+  const saveAvoided = async () => {
+    setSaved(true)
+    await supabase.from('scorecard_settings').upsert({ key: 'avoided', value: avoided }, { onConflict: 'key' })
+  }
 
-  const logPastWeek = () => {
+  const deletePastWeek = async (id: string) => {
+    setPastWeeks(p => p.filter(w => w.id !== id))
+    await supabase.from('scorecard_weeks').delete().eq('id', id)
+  }
+
+  const logPastWeek = async () => {
     if (!newWeek.range) return
+    const id = Date.now().toString()
     const week: PastWeek = {
+      id,
       range: newWeek.range,
       dms: Number(newWeek.dms) || 0,
       posts: Number(newWeek.posts) || 0,
@@ -61,6 +100,10 @@ export default function Scorecard() {
     setPastWeeks(p => [week, ...p])
     setNewWeek({ range: '', dms: '', posts: '', sleep: '', cmts: '', savings: '', pct: '' })
     setShowLogWeek(false)
+    await supabase.from('scorecard_weeks').insert({
+      id: week.id, range: week.range, dms: week.dms, posts: week.posts,
+      sleep: week.sleep, cmts: week.cmts, savings: week.savings, pct: week.pct,
+    })
   }
 
   // Calculate current week date range
@@ -72,6 +115,16 @@ export default function Scorecard() {
   const sun = new Date(mon)
   sun.setDate(mon.getDate() + 6)
   const weekLabel = `${mon.toLocaleDateString('en', { day: 'numeric', month: 'short' })} to ${sun.toLocaleDateString('en', { day: 'numeric', month: 'short' })}`
+
+  if (loading) {
+    return (
+      <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
+        <div className="page-overlay">
+          <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2.5rem 2rem', color: 'var(--color-text-placeholder)', fontSize: '0.85rem' }}>Loading...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
@@ -143,7 +196,7 @@ export default function Scorecard() {
                 value={avoided}
                 onChange={e => { setAvoided(e.target.value); setSaved(false) }}
               />
-              <button onClick={() => setSaved(true)} className="btn-primary">
+              <button onClick={saveAvoided} className="btn-primary">
                 {saved ? 'Saved' : 'Save Reflection'}
               </button>
             </div>
@@ -180,13 +233,13 @@ export default function Scorecard() {
               <div style={{ fontSize: '0.78rem', color: 'var(--color-text-placeholder)' }}>No past weeks logged yet.</div>
             </div>
           ) : (
-            pastWeeks.map((w, i) => (
-              <div key={i} className="card" style={{ padding: '1rem 1.25rem', marginBottom: '0.625rem' }}>
+            pastWeeks.map((w) => (
+              <div key={w.id} className="card" style={{ padding: '1rem 1.25rem', marginBottom: '0.625rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.625rem' }}>
                   <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>{w.range}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span className={`badge ${w.pct >= 80 ? 'badge-green' : w.pct >= 40 ? 'badge-yellow' : 'badge-red'}`}>{w.pct}%</span>
-                    <button onClick={() => deletePastWeek(i)} style={{ background: 'transparent', border: 'none', color: 'var(--color-text-placeholder)', cursor: 'pointer', fontSize: '0.85rem', padding: '0 0.2rem', lineHeight: 1 }}>×</button>
+                    <button onClick={() => deletePastWeek(w.id)} style={{ background: 'transparent', border: 'none', color: 'var(--color-text-placeholder)', cursor: 'pointer', fontSize: '0.85rem', padding: '0 0.2rem', lineHeight: 1 }}>×</button>
                   </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.5rem' }}>

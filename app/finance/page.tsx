@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { fmtDateWithDay } from '@/lib/dateUtils'
+import { supabase } from '@/lib/supabase'
 
 type EntryType = 'salary' | 'signl' | 'gift' | 'transfer' | 'other'
 type Income = { id: string; amount: number; type: EntryType; note: string; date: string }
@@ -23,21 +24,12 @@ const PALETTE = ['#7a8fbc', '#5d9c70', '#c4a842', '#9b7fd4', '#8a8a94', '#c0504d
 
 export default function Finance() {
   const [tab, setTab] = useState<'expenses' | 'income' | 'savings'>('expenses')
-  const [incomes, setIncomes] = useState<Income[]>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-finance-incomes') || '[]') } catch { return [] }
-  })
-  const [expenses, setExpenses] = useState<Expense[]>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-finance-expenses') || '[]') } catch { return [] }
-  })
-  const [savings, setSavings] = useState<SavingsOp[]>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-finance-savings') || '[]') } catch { return [] }
-  })
-  const [savingsTarget, setSavingsTarget] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('bl-finance-target') || '20000') } catch { return 20000 }
-  })
-  const [expCategories, setExpCategories] = useState<CustomCat[]>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-finance-cats') || 'null') || DEFAULT_EXP_CATS } catch { return DEFAULT_EXP_CATS }
-  })
+  const [incomes, setIncomes] = useState<Income[]>([])
+  const [expenses, setExpenses] = useState<Expense[]>([])
+  const [savings, setSavings] = useState<SavingsOp[]>([])
+  const [savingsTarget, setSavingsTarget] = useState(20000)
+  const [expCategories, setExpCategories] = useState<CustomCat[]>(DEFAULT_EXP_CATS)
+  const [loading, setLoading] = useState(true)
   const [showAddCat, setShowAddCat] = useState(false)
   const [newCat, setNewCat] = useState({ name: '', color: '#f26419' })
 
@@ -45,11 +37,53 @@ export default function Finance() {
   const [newInc, setNewInc] = useState({ amount: '', type: 'salary' as EntryType, note: '' })
   const [newSav, setNewSav] = useState({ amount: '', dir: 'in' as 'in' | 'out', reason: '' })
 
-  useEffect(() => { localStorage.setItem('bl-finance-incomes', JSON.stringify(incomes)) }, [incomes])
-  useEffect(() => { localStorage.setItem('bl-finance-expenses', JSON.stringify(expenses)) }, [expenses])
-  useEffect(() => { localStorage.setItem('bl-finance-savings', JSON.stringify(savings)) }, [savings])
-  useEffect(() => { localStorage.setItem('bl-finance-target', JSON.stringify(savingsTarget)) }, [savingsTarget])
-  useEffect(() => { localStorage.setItem('bl-finance-cats', JSON.stringify(expCategories)) }, [expCategories])
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const [
+        { data: incData },
+        { data: expData },
+        { data: savData },
+        { data: catData },
+        { data: settData },
+      ] = await Promise.all([
+        supabase.from('finance_incomes').select('*').order('date', { ascending: false }),
+        supabase.from('finance_expenses').select('*').order('date', { ascending: false }),
+        supabase.from('finance_savings').select('*').order('date', { ascending: false }),
+        supabase.from('finance_categories').select('*'),
+        supabase.from('finance_settings').select('*'),
+      ])
+
+      setIncomes((incData || []).map((r: { id: string; amount: number; type: EntryType; note: string; date: string }) => ({
+        id: r.id, amount: r.amount, type: r.type, note: r.note, date: r.date,
+      })))
+      setExpenses((expData || []).map((r: { id: string; amount: number; category: string; note: string; date: string }) => ({
+        id: r.id, amount: r.amount, category: r.category, note: r.note, date: r.date,
+      })))
+      setSavings((savData || []).map((r: { id: string; amount: number; dir: 'in' | 'out'; reason: string; date: string }) => ({
+        id: r.id, amount: r.amount, dir: r.dir, reason: r.reason, date: r.date,
+      })))
+
+      if (catData && catData.length > 0) {
+        setExpCategories(catData.map((r: { id: string; name: string; color: string }) => ({ id: r.id, name: r.name, color: r.color })))
+      } else {
+        // Seed default categories
+        await supabase.from('finance_categories').insert(DEFAULT_EXP_CATS)
+      }
+
+      const targetRow = (settData || []).find((r: { key: string; value: string }) => r.key === 'savings_target')
+      if (targetRow) setSavingsTarget(Number(targetRow.value))
+
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  // Save savings target to Supabase when it changes (debounced via blur or explicit save)
+  const saveSavingsTarget = async (val: number) => {
+    setSavingsTarget(val)
+    await supabase.from('finance_settings').upsert({ key: 'savings_target', value: String(val) }, { onConflict: 'key' })
+  }
 
   const today = new Date().toISOString().split('T')[0]
   const monthExpenses = expenses.reduce((s, e) => s + e.amount, 0)
@@ -60,38 +94,65 @@ export default function Finance() {
 
   const getCat = (id: string) => expCategories.find(c => c.id === id) || { name: id, color: '#8a8a94' }
 
-  const addExpense = () => {
+  const addExpense = async () => {
     if (!newExp.amount) return
-    setExpenses(p => [{ id: Date.now().toString(), amount: Number(newExp.amount), category: newExp.category, note: newExp.note, date: today }, ...p])
+    const item: Expense = { id: Date.now().toString(), amount: Number(newExp.amount), category: newExp.category, note: newExp.note, date: today }
+    setExpenses(p => [item, ...p])
     setNewExp({ amount: '', category: newExp.category, note: '' })
+    await supabase.from('finance_expenses').insert({ id: item.id, amount: item.amount, category: item.category, note: item.note, date: item.date })
   }
 
-  const addIncome = () => {
+  const addIncome = async () => {
     if (!newInc.amount) return
-    setIncomes(p => [{ id: Date.now().toString(), amount: Number(newInc.amount), type: newInc.type, note: newInc.note, date: today }, ...p])
+    const item: Income = { id: Date.now().toString(), amount: Number(newInc.amount), type: newInc.type, note: newInc.note, date: today }
+    setIncomes(p => [item, ...p])
     setNewInc({ amount: '', type: newInc.type, note: '' })
+    await supabase.from('finance_incomes').insert({ id: item.id, amount: item.amount, type: item.type, note: item.note, date: item.date })
   }
 
-  const addSavings = () => {
+  const addSavings = async () => {
     if (!newSav.amount) return
-    setSavings(p => [{ id: Date.now().toString(), amount: Number(newSav.amount), dir: newSav.dir, reason: newSav.reason, date: today }, ...p])
+    const item: SavingsOp = { id: Date.now().toString(), amount: Number(newSav.amount), dir: newSav.dir, reason: newSav.reason, date: today }
+    setSavings(p => [item, ...p])
     setNewSav({ amount: '', dir: 'in', reason: '' })
+    await supabase.from('finance_savings').insert({ id: item.id, amount: item.amount, dir: item.dir, reason: item.reason, date: item.date })
   }
 
-  const deleteExpense = (id: string) => setExpenses(p => p.filter(e => e.id !== id))
-  const deleteIncome = (id: string) => setIncomes(p => p.filter(i => i.id !== id))
-  const deleteSavings = (id: string) => setSavings(p => p.filter(s => s.id !== id))
+  const deleteExpense = async (id: string) => {
+    setExpenses(p => p.filter(e => e.id !== id))
+    await supabase.from('finance_expenses').delete().eq('id', id)
+  }
+  const deleteIncome = async (id: string) => {
+    setIncomes(p => p.filter(i => i.id !== id))
+    await supabase.from('finance_incomes').delete().eq('id', id)
+  }
+  const deleteSavings = async (id: string) => {
+    setSavings(p => p.filter(s => s.id !== id))
+    await supabase.from('finance_savings').delete().eq('id', id)
+  }
 
-  const addCategory = () => {
+  const addCategory = async () => {
     if (!newCat.name.trim()) return
-    setExpCategories(p => [...p, { id: Date.now().toString(), name: newCat.name.trim(), color: newCat.color }])
+    const cat: CustomCat = { id: Date.now().toString(), name: newCat.name.trim(), color: newCat.color }
+    setExpCategories(p => [...p, cat])
     setNewCat({ name: '', color: '#f26419' })
     setShowAddCat(false)
+    await supabase.from('finance_categories').insert({ id: cat.id, name: cat.name, color: cat.color })
   }
 
   const catTotals = expCategories.map(cat => ({
     cat, total: expenses.filter(e => e.category === cat.id).reduce((s, e) => s + e.amount, 0)
   })).filter(c => c.total > 0)
+
+  if (loading) {
+    return (
+      <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
+        <div className="page-overlay">
+          <div style={{ maxWidth: '900px', margin: '0 auto', padding: '2.5rem 2rem', color: 'var(--color-text-placeholder)', fontSize: '0.85rem' }}>Loading...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
@@ -264,7 +325,9 @@ export default function Finance() {
                 <div style={{ fontFamily: 'var(--font-playfair)', fontSize: '2.5rem', fontWeight: '700', color: savingsBalance >= 0 ? '#5d9c70' : '#c0504d', marginBottom: '0.75rem' }}>PKR {savingsBalance.toLocaleString()}</div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.625rem', marginBottom: '0.5rem' }}>
                   <span style={{ fontSize: '0.72rem', color: 'var(--color-text-dim)' }}>Monthly target:</span>
-                  <input type="number" className="input-dark" style={{ width: '120px', textAlign: 'center' }} value={savingsTarget} onChange={e => setSavingsTarget(Number(e.target.value))} />
+                  <input type="number" className="input-dark" style={{ width: '120px', textAlign: 'center' }} value={savingsTarget}
+                    onChange={e => setSavingsTarget(Number(e.target.value))}
+                    onBlur={e => saveSavingsTarget(Number(e.target.value))} />
                 </div>
                 <div style={{ height: '4px', background: 'var(--color-border-subtle)', borderRadius: '2px', maxWidth: '300px', margin: '0 auto' }}>
                   <div style={{ height: '100%', width: `${Math.min((savingsBalance / savingsTarget) * 100, 100)}%`, background: '#5d9c70', borderRadius: '2px', transition: 'width 0.4s ease' }} />

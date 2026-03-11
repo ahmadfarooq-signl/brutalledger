@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { fmtDateWithDay } from '@/lib/dateUtils'
+import { supabase } from '@/lib/supabase'
 
 type Priority = 'high' | 'normal' | 'low'
 type Status = 'today' | 'active' | 'completed'
@@ -27,15 +28,9 @@ const TODAY = new Date().toISOString().split('T')[0]
 const BLANK_TASK = { title: '', projectId: '', priority: 'normal' as Priority, estimatedMins: '', dueDate: TODAY }
 
 export default function Tasks() {
-  const [projects, setProjects] = useState<Project[]>(() => {
-    try { return JSON.parse(localStorage.getItem('bl-tasks-projects') || '[]') } catch { return [] }
-  })
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('bl-tasks-tasks') || '[]')
-      return saved.map((t: Task) => ({ ...t, isTracking: false, trackStart: null }))
-    } catch { return [] }
-  })
+  const [projects, setProjects] = useState<Project[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Status | 'all'>('all')
   const [projectFilter, setProjectFilter] = useState('all')
   const [showAddTask, setShowAddTask] = useState(false)
@@ -47,8 +42,35 @@ export default function Tasks() {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editTask, setEditTask] = useState(BLANK_TASK)
 
-  useEffect(() => { localStorage.setItem('bl-tasks-projects', JSON.stringify(projects)) }, [projects])
-  useEffect(() => { localStorage.setItem('bl-tasks-tasks', JSON.stringify(tasks)) }, [tasks])
+  // Load data from Supabase on mount
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const [{ data: projData }, { data: taskData }] = await Promise.all([
+        supabase.from('tasks_projects').select('*').order('rowid' as never),
+        supabase.from('tasks').select('*').order('rowid' as never),
+      ])
+      setProjects((projData || []).map((p: { id: string; name: string; color: string }) => ({ id: p.id, name: p.name, color: p.color })))
+      setTasks((taskData || []).map((t: {
+        id: string; title: string; project_id: string; priority: Priority; status: Status;
+        estimated_mins: number; logged_secs: number; due_date: string; completed_at?: string
+      }) => ({
+        id: t.id,
+        title: t.title,
+        projectId: t.project_id,
+        priority: t.priority,
+        status: t.status,
+        estimatedMins: t.estimated_mins,
+        loggedSecs: t.logged_secs,
+        isTracking: false,
+        trackStart: null,
+        dueDate: t.due_date,
+        completedAt: t.completed_at,
+      })))
+      setLoading(false)
+    }
+    load()
+  }, [])
 
   useEffect(() => {
     if (!activeTaskId) return
@@ -56,7 +78,7 @@ export default function Tasks() {
     return () => clearInterval(interval)
   }, [activeTaskId])
 
-  const addTask = () => {
+  const addTask = async () => {
     if (!newTask.title) return
     const projectId = newTask.projectId || (projects[0]?.id || '')
     const t: Task = {
@@ -72,15 +94,27 @@ export default function Tasks() {
     setTasks(p => [t, ...p])
     setNewTask({ ...BLANK_TASK, projectId: projects[0]?.id || '' })
     setShowAddTask(false)
+    await supabase.from('tasks').insert({
+      id: t.id,
+      title: t.title,
+      project_id: t.projectId,
+      priority: t.priority,
+      status: t.status,
+      estimated_mins: t.estimatedMins,
+      logged_secs: 0,
+      due_date: t.dueDate,
+      completed_at: null,
+    })
   }
 
-  const addProject = () => {
+  const addProject = async () => {
     if (!newProject.name) return
     const p: Project = { ...newProject, id: Date.now().toString() }
     setProjects(prev => [...prev, p])
     setNewProject({ name: '', color: '#f26419' })
     setShowAddProject(false)
     setNewTask(t => ({ ...t, projectId: p.id }))
+    await supabase.from('tasks_projects').insert({ id: p.id, name: p.name, color: p.color })
   }
 
   const startEdit = (task: Task) => {
@@ -94,7 +128,7 @@ export default function Tasks() {
     })
   }
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editTask.title || !editingTaskId) return
     setTasks(prev => prev.map(t => t.id === editingTaskId ? {
       ...t,
@@ -104,52 +138,85 @@ export default function Tasks() {
       estimatedMins: Number(editTask.estimatedMins) || 0,
       dueDate: editTask.dueDate,
     } : t))
+    const task = tasks.find(t => t.id === editingTaskId)
     setEditingTaskId(null)
+    await supabase.from('tasks').update({
+      title: editTask.title,
+      project_id: editTask.projectId || task?.projectId,
+      priority: editTask.priority,
+      estimated_mins: Number(editTask.estimatedMins) || 0,
+      due_date: editTask.dueDate,
+    }).eq('id', editingTaskId)
   }
 
   const toggleTimer = (id: string) => {
     const now = Date.now()
+    let stoppedTaskId: string | null = null
+    let stoppedLoggedSecs = 0
+
     setTasks(prev => prev.map(t => {
       if (t.id === id) {
         if (t.isTracking) {
           const elapsed = Math.floor((now - (t.trackStart || now)) / 1000)
-          return { ...t, isTracking: false, trackStart: null, loggedSecs: t.loggedSecs + elapsed }
+          stoppedTaskId = t.id
+          stoppedLoggedSecs = t.loggedSecs + elapsed
+          return { ...t, isTracking: false, trackStart: null, loggedSecs: stoppedLoggedSecs }
         }
         return { ...t, isTracking: true, trackStart: now }
       }
       if (t.isTracking) {
         const elapsed = Math.floor((now - (t.trackStart || now)) / 1000)
-        return { ...t, isTracking: false, trackStart: null, loggedSecs: t.loggedSecs + elapsed }
+        stoppedTaskId = t.id
+        stoppedLoggedSecs = t.loggedSecs + elapsed
+        return { ...t, isTracking: false, trackStart: null, loggedSecs: stoppedLoggedSecs }
       }
       return t
     }))
     setActiveTaskId(id === activeTaskId ? null : id)
+
+    // Save loggedSecs to Supabase when timer stops
+    if (stoppedTaskId) {
+      supabase.from('tasks').update({ logged_secs: stoppedLoggedSecs }).eq('id', stoppedTaskId)
+    }
   }
 
-  const deleteTask = (id: string) => {
+  const deleteTask = async (id: string) => {
     setTasks(prev => prev.filter(t => t.id !== id))
     if (activeTaskId === id) setActiveTaskId(null)
     if (editingTaskId === id) setEditingTaskId(null)
+    await supabase.from('tasks').delete().eq('id', id)
   }
 
-  const deleteProject = (id: string) => {
+  const deleteProject = async (id: string) => {
     setProjects(prev => prev.filter(p => p.id !== id))
     setTasks(prev => prev.filter(t => t.projectId !== id))
     if (projectFilter === id) setProjectFilter('all')
+    await supabase.from('tasks_projects').delete().eq('id', id)
+    await supabase.from('tasks').delete().eq('project_id', id)
   }
 
-  const toggleComplete = (id: string) => {
+  const toggleComplete = async (id: string) => {
     const now = Date.now()
+    let updatedTask: Task | null = null
     setTasks(prev => prev.map(t => {
       if (t.id !== id) return t
       if (t.status === 'completed') {
-        // uncomplete
-        return { ...t, status: 'active', completedAt: undefined }
+        updatedTask = { ...t, status: 'active', completedAt: undefined }
+        return updatedTask
       }
       const extra = t.isTracking ? Math.floor((now - (t.trackStart || now)) / 1000) : 0
-      return { ...t, status: 'completed', isTracking: false, trackStart: null, loggedSecs: t.loggedSecs + extra, completedAt: new Date().toISOString() }
+      updatedTask = { ...t, status: 'completed', isTracking: false, trackStart: null, loggedSecs: t.loggedSecs + extra, completedAt: new Date().toISOString() }
+      return updatedTask
     }))
     if (activeTaskId === id) setActiveTaskId(null)
+    if (updatedTask) {
+      const ut = updatedTask as Task
+      await supabase.from('tasks').update({
+        status: ut.status,
+        logged_secs: ut.loggedSecs,
+        completed_at: ut.completedAt || null,
+      }).eq('id', id)
+    }
   }
 
   const getElapsedSecs = (task: Task) => {
@@ -193,6 +260,16 @@ export default function Tasks() {
       </div>
     </>
   )
+
+  if (loading) {
+    return (
+      <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
+        <div className="page-overlay">
+          <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2.5rem 2rem', color: 'var(--color-text-placeholder)', fontSize: '0.85rem' }}>Loading...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-bg" style={{ backgroundImage: `url(${BG})` }}>
